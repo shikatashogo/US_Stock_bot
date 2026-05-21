@@ -1,8 +1,8 @@
 # 環境変数（絶対にGitHubにあげない）
 .env
 
-# キャッシュ・データ
-data/
+# キャッシュ・データ（/data/ = ルートの data/ のみ。src/data/ は対象外）
+/data/
 *.pkl
 *.pickle
 
