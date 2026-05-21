@@ -242,6 +242,7 @@ if run_btn:
                 "上昇余地": up,
                 "損切": fp(val.stop_loss),
                 "利確目標": fp(val.take_profit),
+                "到達見込み": c.months_to_target or "―",
             })
         st.dataframe(rows, use_container_width=True, hide_index=True)
 
@@ -281,7 +282,11 @@ if run_btn:
             with col2:
                 st.markdown("**📐 エントリー目安**")
                 st.metric("損切ライン", fmt(val.stop_loss))
-                st.metric("利確目標",   fmt(val.take_profit))
+                target_label = fmt(val.take_profit)
+                target_help = f"到達見込み: {c.months_to_target}" if c.months_to_target else None
+                st.metric("利確目標", target_label, help=target_help)
+                if c.months_to_target:
+                    st.caption(f"⏱ 到達見込み: {c.months_to_target}")
                 if tech.rsi_14:
                     st.metric("RSI(14)", f"{tech.rsi_14:.0f}　{tech.rsi_signal}")
 

@@ -47,10 +47,13 @@ class Candidate:
     recommendation: str = "様子見"  # "強く推奨" / "推奨" / "要観察" / "様子見"
     confidence: str = "低"          # "高" / "中" / "低"
 
-    # 推奨理由のサマリ（Claude AIへの入力にも使用）
+    # 推奨理由のサマリ
     bull_case: list[str] = field(default_factory=list)   # 上昇根拠
     bear_case: list[str] = field(default_factory=list)   # リスク・下落根拠
     key_risks: list[str] = field(default_factory=list)   # 重要リスク
+
+    # 利確目標への到達見込み期間
+    months_to_target: Optional[str] = None  # 例: "6〜12ヶ月"
 
     # スクリーニング通過フラグ
     passed_hard_filter: bool = True
@@ -182,6 +185,13 @@ class StockScreener:
         if fcf is not None and fcf < 0 and fd.health_score < 0.5:
             return "FCFマイナス＋財務健全性低"
 
+        # 1ヶ月・3ヶ月リターンが両方マイナス → 明確な下降トレンド
+        if tech is not None:
+            t1m = tech.trend_1m
+            t3m = tech.trend_3m
+            if (t1m is not None and t1m < 0) and (t3m is not None and t3m < 0):
+                return f"下降トレンド継続（1M: {t1m:.1f}%、3M: {t3m:.1f}%）"
+
         return ""  # 通過
 
     # ─── 複合スコア計算 ─────────────────────────────────────────
@@ -309,6 +319,58 @@ class StockScreener:
         next_earn = fd_raw.get("next_earnings_date")
         if next_earn:
             candidate.key_risks.append(f"次回決算: {next_earn}（決算跨ぎリスク）")
+
+        # 利確目標への到達見込み期間
+        candidate.months_to_target = self._estimate_months_to_target(tech, val)
+
+    # ─── 利確目標 到達見込み ─────────────────────────────────────
+
+    def _estimate_months_to_target(
+        self,
+        tech: Optional[TechnicalSignal],
+        val:  Optional[ValuationResult],
+    ) -> Optional[str]:
+        """
+        利確目標（take_profit）への到達見込み期間を推定する。
+
+        計算方針:
+          - 直近6ヶ月リターン（月次換算）を基準ペースとして使用
+          - 6ヶ月がマイナスなら3ヶ月を参照
+          - どちらもマイナスなら保守値（年率8%）を採用
+          - 上昇余地 ÷ 月次ペース = 到達月数
+        """
+        if not val or not val.upside_pct or val.upside_pct <= 0:
+            return None
+
+        upside = val.upside_pct / 100  # 小数に変換
+
+        # 月次ペースを推定（直近の実績から）
+        monthly_pace: Optional[float] = None
+        if tech:
+            if tech.trend_6m and tech.trend_6m > 0:
+                monthly_pace = tech.trend_6m / 6 / 100
+            elif tech.trend_3m and tech.trend_3m > 0:
+                monthly_pace = tech.trend_3m / 3 / 100
+
+        if not monthly_pace or monthly_pace <= 0:
+            # 保守値: 年率8%（長期株式市場平均）
+            monthly_pace = 0.08 / 12
+
+        months = upside / monthly_pace
+        months = max(1.0, min(72.0, months))  # 1ヶ月〜6年の範囲でキャップ
+
+        if months <= 3:
+            return "3ヶ月以内"
+        elif months <= 6:
+            return "3〜6ヶ月"
+        elif months <= 12:
+            return "6〜12ヶ月"
+        elif months <= 24:
+            return "1〜2年"
+        elif months <= 36:
+            return "2〜3年"
+        else:
+            return "3年超（長期保有向き）"
 
 
 def filter_recommendations(candidates: list[Candidate]) -> list[Candidate]:

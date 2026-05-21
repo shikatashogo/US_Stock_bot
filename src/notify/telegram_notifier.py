@@ -140,7 +140,10 @@ def format_report(candidates, macro_snap: dict, season_label: str = "") -> str:
         lines.append(f"   {c.recommendation}  確度:{c.confidence}  スコア:{c.composite_score:.1f}/10")
         lines.append(f"   💴 現在株価: {fp(val.current_price)}")
         lines.append(f"   📐 理論株価(中央): {fp(val.fair_value_mid)}  上昇余地: {upside}")
-        lines.append(f"   ✂️ 損切: {fp(val.stop_loss)}　🎯 利確: {fp(val.take_profit)}")
+        target_str = fp(val.take_profit)
+        if c.months_to_target:
+            target_str += f"（到達見込み: {c.months_to_target}）"
+        lines.append(f"   ✂️ 損切: {fp(val.stop_loss)}　🎯 利確: {target_str}")
 
         if val.analyst_target and val.current_price and val.analyst_target > val.current_price:
             a_up = (val.analyst_target - val.current_price) / val.current_price * 100
