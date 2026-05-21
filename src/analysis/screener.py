@@ -85,7 +85,7 @@ class StockScreener:
         technicals:   dict[str, TechnicalSignal],
         valuations:   dict[str, ValuationResult],
         raw_fd:       dict[str, dict],
-        macro_score:  float = 0.0,
+        macro_snap:   Optional[dict] = None,
     ) -> list[Candidate]:
         """
         全銘柄をスクリーニングして候補リストを返す
@@ -99,6 +99,10 @@ class StockScreener:
         Returns:
             Candidateリスト（スコア降順）
         """
+        macro_snap   = macro_snap or {}
+        macro_score  = macro_snap.get("macro_score", 0.0)
+        vix          = macro_snap.get("vix_current")
+
         candidates = []
         all_symbols = set(fundamentals.keys())
 
@@ -131,7 +135,8 @@ class StockScreener:
                 continue   # スクリーニング除外
 
             # 複合スコア計算
-            composite = self._calc_composite_score(fd_score, tech, val, macro_score)
+            beta = fd_raw.get("beta")
+            composite = self._calc_composite_score(fd_score, tech, val, macro_score, vix, beta)
             candidate.composite_score = composite
 
             # 推奨判定
@@ -202,6 +207,8 @@ class StockScreener:
         tech:  Optional[TechnicalSignal],
         val:   Optional[ValuationResult],
         macro_score: float,
+        vix:   Optional[float] = None,
+        beta:  Optional[float] = None,
     ) -> float:
         """複合スコアを計算（0〜10点）"""
 
@@ -225,11 +232,29 @@ class StockScreener:
         # マクロ調整（-1〜+1点）
         macro_adj = max(-1.0, min(1.0, macro_score * 0.5))
 
+        # Beta × VIX 調整
+        # VIX高（恐怖相場）→ 低ベータ株を優遇、高ベータ株を減点
+        # VIX低（楽観相場）→ 高ベータ株に小加点
+        beta_adj = 0.0
+        if vix is not None and beta is not None:
+            if vix >= 25:      # 恐怖相場
+                if beta <= 0.7:
+                    beta_adj = +0.4   # 低ベータ = 守備的 → 加点
+                elif beta >= 1.5:
+                    beta_adj = -0.5   # 高ベータ = 高リスク → 大減点
+                elif beta >= 1.2:
+                    beta_adj = -0.2
+            elif vix <= 15:    # 楽観相場
+                if beta >= 1.3:
+                    beta_adj = +0.2   # 高ベータ = 強気相場の恩恵 → 小加点
+                elif beta <= 0.6:
+                    beta_adj = -0.1   # 超低ベータは機会損失
+
         composite = (
             fd_score    * self.FUNDAMENTAL_WEIGHT +
             val_score   * self.VALUATION_WEIGHT   +
             tech_score  * self.TECHNICAL_WEIGHT
-        ) + macro_adj
+        ) + macro_adj + beta_adj
 
         return round(max(0.0, min(10.0, composite)), 2)
 
@@ -327,6 +352,25 @@ class StockScreener:
 
         if tech and tech.rsi_14 and tech.rsi_14 > 70:
             candidate.key_risks.append(f"RSI {tech.rsi_14:.0f}（過熱気味）→ 短期調整リスク")
+
+        # 相対強度をbull_caseに反映
+        if tech and tech.rs_label == "市場アウトパフォーム" and tech.relative_strength_1m:
+            candidate.bull_case.append(
+                f"市場対比 +{tech.relative_strength_1m:.1f}%pt アウトパフォーム（モメンタム継続期待）"
+            )
+        elif tech and tech.rs_label == "市場アンダーパフォーム" and tech.relative_strength_1m:
+            candidate.key_risks.append(
+                f"市場対比 {tech.relative_strength_1m:.1f}%pt アンダーパフォーム（出遅れ注意）"
+            )
+
+        # ベータ情報をkey_risksまたはbull_caseに付記
+        beta = fd_raw.get("beta")
+        vix_level = ""
+        if beta is not None:
+            if beta >= 1.5:
+                candidate.key_risks.append(f"β={beta:.2f}（高ボラティリティ）→ 相場急落時の下落幅が大きい")
+            elif beta <= 0.6:
+                candidate.bull_case.append(f"β={beta:.2f}（低ボラティリティ）→ 下落相場での安定性あり")
 
         # 急騰後かつ上昇余地が限定的な場合の警告
         if tech and tech.trend_1m and val and val.upside_pct is not None:

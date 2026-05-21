@@ -60,11 +60,20 @@ class TechnicalSignal:
     tech_score: float = 0.0
     signals: list[str] = field(default_factory=list)
 
+    # 相対強度（ベンチマーク対比の超過リターン）
+    relative_strength_1m: Optional[float] = None  # 対ベンチマーク超過リターン（%ポイント）
+    rs_label: str = ""  # "市場アウトパフォーム" / "市場アンダーパフォーム" / ""
+
 
 class TechnicalAnalyzer:
     """テクニカル分析クラス"""
 
-    def analyze(self, symbol: str, price_df: pd.DataFrame) -> TechnicalSignal:
+    def analyze(
+        self,
+        symbol: str,
+        price_df: pd.DataFrame,
+        benchmark_1m: Optional[float] = None,  # ベンチマークの1ヶ月リターン（%）
+    ) -> TechnicalSignal:
         """
         株価履歴データからテクニカル指標を計算
 
@@ -181,6 +190,22 @@ class TechnicalAnalyzer:
         if w52_low > 0 and w52_low < current:
             sig.pct_from_52w_low = round((current - w52_low) / w52_low * 100, 1)
 
+        # ── 相対強度（RS）─────────────────────────────────────────
+        if benchmark_1m is not None and sig.trend_1m is not None:
+            sig.relative_strength_1m = round(sig.trend_1m - benchmark_1m, 2)
+            if sig.relative_strength_1m >= 5:
+                sig.rs_label = "市場アウトパフォーム"
+                sig.signals.append(
+                    f"市場対比 +{sig.relative_strength_1m:.1f}%pt アウトパフォーム"
+                )
+            elif sig.relative_strength_1m <= -5:
+                sig.rs_label = "市場アンダーパフォーム"
+                sig.signals.append(
+                    f"市場対比 {sig.relative_strength_1m:.1f}%pt アンダーパフォーム"
+                )
+            else:
+                sig.rs_label = "市場並み"
+
         # ── テクニカルスコア ──────────────────────────────────────
         sig.tech_score = self._calc_tech_score(sig)
         return sig
@@ -248,6 +273,14 @@ class TechnicalAnalyzer:
         if pct_from_low is not None:
             if pct_from_low < 20:   score += 0.3   # 52週安値から20%以内
             elif pct_from_low > 80: score -= 0.2   # 52週高値圏
+
+        # 相対強度（市場アウトパフォームを加点）
+        rs = sig.relative_strength_1m
+        if rs is not None:
+            if rs >= 10:    score += 0.4
+            elif rs >= 5:   score += 0.2
+            elif rs <= -10: score -= 0.4
+            elif rs <= -5:  score -= 0.2
 
         return round(max(0.0, min(2.0, score)), 2)
 
