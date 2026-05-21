@@ -138,8 +138,8 @@ class ValuationCalculator:
             fair_values.append(dcf)
 
         # ④ アナリスト目標株価
-        target = fd.get("target_mean_price") or fd.get("target_median_price")
-        analyst_count = fd.get("analyst_count") or 0
+        target        = fd.get("target_mean_price") or fd.get("target_median_price")
+        analyst_count = fd.get("analyst_count") or 0  # 以降の利確目標計算でも使用
         if target and analyst_count >= 3:
             result.analyst_target = target
             fair_values.append(target)
@@ -150,9 +150,17 @@ class ValuationCalculator:
 
         # 理論株価レンジ計算
         if fair_values:
-            result.fair_value_low  = round(min(fair_values), 0)
-            result.fair_value_mid  = round(sum(fair_values) / len(fair_values), 0)
-            result.fair_value_high = round(max(fair_values), 0)
+            sorted_vals = sorted(fair_values)
+            n = len(sorted_vals)
+            # 中央値: 外れ値に強く、単一手法のブレに引きずられない
+            if n % 2 == 1:
+                mid = sorted_vals[n // 2]
+            else:
+                mid = (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+
+            result.fair_value_low  = round(sorted_vals[0], 0)
+            result.fair_value_mid  = round(mid, 0)
+            result.fair_value_high = round(sorted_vals[-1], 0)
             result.upside_pct = round(
                 (result.fair_value_mid - current) / current * 100, 1
             )
@@ -165,14 +173,13 @@ class ValuationCalculator:
 
         # 利確目標: アナリスト目標株価 > 現在株価 → それを使用
         #           それ以外は理論株価中央値（現在株価より高い場合のみ）
-        analyst_target = result.analyst_target
-        analyst_count  = fd.get("analyst_count") or 0
-        if analyst_target and analyst_target > current and analyst_count >= 3:
-            result.take_profit = round(analyst_target, 0)
+        #           いずれも現在株価以下の場合は None（意味のない目標は表示しない）
+        if result.analyst_target and result.analyst_target > current and analyst_count >= 3:
+            result.take_profit = round(result.analyst_target, 0)
         elif result.fair_value_mid and result.fair_value_mid > current:
             result.take_profit = round(result.fair_value_mid, 0)
         else:
-            result.take_profit = round(current * (1 + self.DEFAULT_TAKE_PROFIT_PCT), 0)
+            result.take_profit = None  # 上昇余地なし → 利確目標を設定しない
 
         return result
 

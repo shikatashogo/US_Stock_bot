@@ -115,7 +115,7 @@ class StockScreener:
             candidate = Candidate(
                 symbol=symbol,
                 name=fd_score.name,
-                sector=fd_score.data_quality != "unavailable" and fd_raw.get("sector", "") or "",
+                sector=fd_raw.get("sector", "") if fd_score.data_quality != "unavailable" else "",
                 market=fd_raw.get("market", ""),
                 currency=fd_raw.get("currency", "USD"),
                 fundamental=fd_score,
@@ -191,13 +191,6 @@ class StockScreener:
             t3m = tech.trend_3m
             if (t1m is not None and t1m < 0) and (t3m is not None and t3m < 0):
                 return f"下降トレンド継続（1M: {t1m:.1f}%、3M: {t3m:.1f}%）"
-
-        # 上昇余地が10%未満 → リスクリワードが合わない
-        # （バリュエーション計算がある場合のみ適用）
-        if fd_raw.get("current_price") and fd_raw.get("target_mean_price"):
-            upside = fd_raw.get("target_mean_price", 0) / fd_raw.get("current_price", 1) - 1
-            if upside < 0.10 and upside > -0.05:
-                return f"上昇余地不足（アナリスト目標まで +{upside*100:.1f}%）"
 
         return ""  # 通過
 
@@ -403,6 +396,8 @@ class StockScreener:
             return "3年超（長期保有向き）"
 
 
+_RECOMMENDED_LABELS = {"強く推奨", "推奨"}
+
 def filter_recommendations(candidates: list[Candidate]) -> list[Candidate]:
-    """「推奨」以上の銘柄のみを抽出"""
-    return [c for c in candidates if "推奨" in c.recommendation]
+    """「推奨」以上の銘柄のみを抽出（要観察・様子見は除外）"""
+    return [c for c in candidates if c.recommendation in _RECOMMENDED_LABELS]

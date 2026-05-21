@@ -17,12 +17,7 @@ from config.universe import (
     JAPAN_STOCKS, US_STOCKS,
     get_all_symbols, get_japan_symbols, get_us_symbols, total_count,
 )
-from src.analysis.fundamental import FundamentalAnalyzer
-from src.analysis.screener import StockScreener, filter_recommendations
-from src.analysis.technical import TechnicalAnalyzer
-from src.analysis.valuation import ValuationCalculator
-from src.data.macro_fetcher import MacroFetcher
-from src.data.stock_fetcher import StockFetcher
+from src.analysis.pipeline import run_pipeline
 
 # ─── ページ設定 ───────────────────────────────────────────────────
 
@@ -72,7 +67,7 @@ with st.sidebar:
 
     top_n = st.slider("推奨銘柄の表示上限", min_value=3, max_value=20, value=8)
 
-    use_cache = st.checkbox("キャッシュを使用（高速）", value=True,
+    use_cache = st.checkbox("キャッシュを使用（高速）", value=False,
                             help="ONなら2回目以降は数秒で完了。最新データが必要な場合はOFF")
 
     run_btn = st.button("▶ 分析を実行", type="primary", use_container_width=True)
@@ -126,37 +121,7 @@ def resolve_symbols(mode, scan_mode, custom_symbols, selected_sectors) -> list[s
 @st.cache_data(ttl=3600, show_spinner=False)
 def run_cached(symbols_key: str, use_cache: bool):
     symbols = symbols_key.split(",")
-    return _pipeline(symbols, use_cache)
-
-
-def _pipeline(symbols: list[str], use_cache: bool):
-    fetcher = StockFetcher()
-    macro   = MacroFetcher()
-
-    macro_snap  = macro.get_macro_snapshot(use_cache=use_cache)
-    price_data  = fetcher.fetch_universe_prices(symbols, use_cache=use_cache)
-    fd_raw_dict = fetcher.fetch_universe_fundamentals(symbols, use_cache=use_cache)
-
-    if not fd_raw_dict:
-        return [], macro_snap
-
-    fa = FundamentalAnalyzer()
-    ta = TechnicalAnalyzer()
-    vc = ValuationCalculator()
-
-    fd_scores    = {s: fa.analyze(fd) for s, fd in fd_raw_dict.items()}
-    tech_signals = {s: ta.analyze(s, df) for s, df in price_data.items()}
-    valuations   = {s: vc.calculate(fd) for s, fd in fd_raw_dict.items()}
-
-    screener   = StockScreener()
-    candidates = screener.screen(
-        fundamentals=fd_scores,
-        technicals=tech_signals,
-        valuations=valuations,
-        raw_fd=fd_raw_dict,
-        macro_score=macro_snap.get("macro_score", 0),
-    )
-    return filter_recommendations(candidates), macro_snap
+    return run_pipeline(symbols, use_cache=use_cache)
 
 
 # ─── 実行 & 表示 ─────────────────────────────────────────────────
@@ -224,24 +189,27 @@ if run_btn:
     # スコア上位をサマリーテーブルで俯瞰
     with st.expander("📊 推奨銘柄 一覧表", expanded=True):
         rows = []
-        for c in display:
+        for rank, c in enumerate(display, 1):
             val = c.valuation
             cur = "¥" if c.currency == "JPY" else "$"
-            def fp(v):
-                return f"{cur}{v:,.0f}" if v else "N/A"
+            # fp はクロージャで cur を捕捉するため、lambda ではなく関数で定義
+            # ループ内で毎回同じ定義になるが、cur が変わるため意図的
+            def _fp(v, _cur=cur):  # デフォルト引数でcurをスナップショット
+                if v is None: return "N/A"
+                return f"{_cur}{v:,.0f}"
             up = f"+{val.upside_pct:.1f}%" if val.upside_pct and val.upside_pct >= 0 else (f"{val.upside_pct:.1f}%" if val.upside_pct else "N/A")
             rows.append({
-                "順位": f"{'🟢' if '強く' in c.recommendation else '🔵'} {display.index(c)+1}",
+                "順位": f"{'🟢' if c.recommendation == '強く推奨' else '🔵'} {rank}",
                 "銘柄": f"{c.name}（{c.symbol}）",
                 "セクター": c.sector or "―",
                 "推奨": c.recommendation,
                 "確度": c.confidence,
                 "スコア": f"{c.composite_score:.1f}",
-                "現在株価": fp(val.current_price),
-                "理論株価(中央)": fp(val.fair_value_mid),
+                "現在株価": _fp(val.current_price),
+                "理論株価(中央)": _fp(val.fair_value_mid),
                 "上昇余地": up,
-                "損切": fp(val.stop_loss),
-                "利確目標": fp(val.take_profit),
+                "損切": _fp(val.stop_loss),
+                "利確目標": _fp(val.take_profit),
                 "到達見込み": c.months_to_target or "―",
             })
         st.dataframe(rows, use_container_width=True, hide_index=True)
@@ -255,10 +223,10 @@ if run_btn:
         fd   = c.fundamental
         cur  = c.currency
 
-        def fmt(v):
+        def fmt(v, _cur=cur):  # デフォルト引数でループ変数curをスナップショット
             if v is None: return "N/A"
-            sym = "¥" if cur == "JPY" else "$"
-            return f"{sym}{v:,.0f}" if cur == "JPY" else f"{sym}{v:.2f}"
+            sym = "¥" if _cur == "JPY" else "$"
+            return f"{sym}{v:,.0f}" if _cur == "JPY" else f"{sym}{v:.2f}"
 
         upside = val.upside_pct
         icon   = "🟢" if "強く" in c.recommendation else "🔵"
@@ -288,7 +256,8 @@ if run_btn:
                 if c.months_to_target:
                     st.caption(f"⏱ 到達見込み: {c.months_to_target}")
                 if tech.rsi_14:
-                    st.metric("RSI(14)", f"{tech.rsi_14:.0f}　{tech.rsi_signal}")
+                    st.metric("RSI(14)", f"{tech.rsi_14:.0f}")
+                    st.caption(f"判定: {tech.rsi_signal}")
 
             with col3:
                 st.markdown("**📊 スコア内訳**")

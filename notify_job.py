@@ -39,12 +39,7 @@ except ImportError:
 from loguru import logger
 
 from config.universe import get_all_symbols, get_japan_symbols, get_us_symbols
-from src.analysis.fundamental import FundamentalAnalyzer
-from src.analysis.screener import StockScreener, filter_recommendations
-from src.analysis.technical import TechnicalAnalyzer
-from src.analysis.valuation import ValuationCalculator
-from src.data.macro_fetcher import MacroFetcher
-from src.data.stock_fetcher import StockFetcher
+from src.analysis.pipeline import run_pipeline
 from src.notify.telegram_notifier import TelegramNotifier, format_report
 
 logger.remove()
@@ -93,40 +88,7 @@ def next_earnings_season() -> str:
 
 
 # ─── 分析パイプライン ────────────────────────────────────────────
-
-def run_analysis(symbols: list[str], top_n: int = 8):
-    fetcher = StockFetcher()
-    macro   = MacroFetcher()
-
-    logger.info(f"分析開始: {len(symbols)}銘柄")
-
-    macro_snap  = macro.get_macro_snapshot(use_cache=True)
-    price_data  = fetcher.fetch_universe_prices(symbols, use_cache=True)
-    fd_raw_dict = fetcher.fetch_universe_fundamentals(symbols, use_cache=True)
-
-    if not fd_raw_dict:
-        logger.error("財務データ取得失敗")
-        return [], macro_snap
-
-    fa = FundamentalAnalyzer()
-    ta = TechnicalAnalyzer()
-    vc = ValuationCalculator()
-
-    fd_scores    = {s: fa.analyze(fd) for s, fd in fd_raw_dict.items()}
-    tech_signals = {s: ta.analyze(s, df) for s, df in price_data.items()}
-    valuations   = {s: vc.calculate(fd) for s, fd in fd_raw_dict.items()}
-
-    screener   = StockScreener()
-    candidates = screener.screen(
-        fundamentals=fd_scores,
-        technicals=tech_signals,
-        valuations=valuations,
-        raw_fd=fd_raw_dict,
-        macro_score=macro_snap.get("macro_score", 0),
-    )
-    recommended = filter_recommendations(candidates)
-    logger.info(f"推奨銘柄: {len(recommended)}銘柄")
-    return recommended[:top_n], macro_snap
+# 実装は src/analysis/pipeline.py の run_pipeline に一元化済み
 
 
 # ─── メイン ─────────────────────────────────────────────────────
@@ -185,7 +147,7 @@ def main():
     else:
         symbols = get_all_symbols()
 
-    candidates, macro_snap = run_analysis(symbols, top_n=args.top)
+    candidates, macro_snap = run_pipeline(symbols, use_cache=True, top_n=args.top)
 
     # ── 通知テキスト生成 ─────────────────────────────────────────
     message = format_report(candidates, macro_snap, season_label)
