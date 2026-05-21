@@ -83,9 +83,9 @@ class StockScreener:
     VALUATION_WEIGHT    = 0.25
     TECHNICAL_WEIGHT    = 0.20
 
-    # 推奨閾値
+    # 推奨閾値（マージン込み。ギリギリ銘柄の推奨⇔非推奨の頻繁な入替を防ぐ）
     STRONG_BUY_THRESHOLD = 7.5
-    BUY_THRESHOLD        = 6.0
+    BUY_THRESHOLD        = 6.3   # 6.0 → 6.3 に引き上げ（安定性向上）
     WATCH_THRESHOLD      = 4.5
 
     def screen(

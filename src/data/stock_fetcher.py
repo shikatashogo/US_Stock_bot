@@ -93,7 +93,7 @@ class StockFetcher:
         cache_key = f"price_{symbol}_{period}_{interval}"
         cache_path = self._cache_path(cache_key)
 
-        if use_cache and self._is_fresh(cache_path, max_age_hours=8.0):
+        if use_cache and self._is_fresh(cache_path, max_age_hours=24.0):
             logger.debug(f"[{symbol}] 株価履歴: キャッシュ使用")
             return self._load(cache_path)
 
@@ -184,7 +184,7 @@ class StockFetcher:
         cache_key = f"fundamentals_{symbol}"
         cache_path = self._cache_path(cache_key)
 
-        if use_cache and self._is_fresh(cache_path, max_age_hours=24.0):
+        if use_cache and self._is_fresh(cache_path, max_age_hours=168.0):  # 7日間
             logger.debug(f"[{symbol}] 財務データ: キャッシュ使用")
             return self._load(cache_path)
 
