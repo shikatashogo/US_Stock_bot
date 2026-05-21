@@ -192,6 +192,13 @@ class StockScreener:
             if (t1m is not None and t1m < 0) and (t3m is not None and t3m < 0):
                 return f"下降トレンド継続（1M: {t1m:.1f}%、3M: {t3m:.1f}%）"
 
+        # 上昇余地が10%未満 → リスクリワードが合わない
+        # （バリュエーション計算がある場合のみ適用）
+        if fd_raw.get("current_price") and fd_raw.get("target_mean_price"):
+            upside = fd_raw.get("target_mean_price", 0) / fd_raw.get("current_price", 1) - 1
+            if upside < 0.10 and upside > -0.05:
+                return f"上昇余地不足（アナリスト目標まで +{upside*100:.1f}%）"
+
         return ""  # 通過
 
     # ─── 複合スコア計算 ─────────────────────────────────────────
@@ -272,10 +279,22 @@ class StockScreener:
 
         # 理論株価中央値が現在株価を大きく下回る場合は確度を下げる
         if val and val.upside_pct is not None and val.upside_pct < -20 and val.analyst_target is None:
-            # アナリスト評価もない場合はより保守的に
             if rec == "強く推奨":
                 rec = "推奨"
             confidence = "低"
+
+        # 上昇余地が小さすぎる場合はリスクリワードが合わないため格下げ
+        if val and val.upside_pct is not None:
+            if val.upside_pct < 5:
+                # 残り上昇余地ほぼゼロ → 推奨不可
+                rec = "要観察"
+                confidence = "低"
+            elif val.upside_pct < 10:
+                # 上昇余地が限定的 → 強推奨は出さない
+                if rec == "強く推奨":
+                    rec = "推奨"
+                if confidence == "高":
+                    confidence = "中"
 
         return rec, confidence
 
@@ -316,6 +335,13 @@ class StockScreener:
         if tech and tech.rsi_14 and tech.rsi_14 > 70:
             candidate.key_risks.append(f"RSI {tech.rsi_14:.0f}（過熱気味）→ 短期調整リスク")
 
+        # 急騰後かつ上昇余地が限定的な場合の警告
+        if tech and tech.trend_1m and val and val.upside_pct is not None:
+            if tech.trend_1m > 20 and val.upside_pct < 15:
+                candidate.key_risks.append(
+                    f"直近1ヶ月で急騰済み（+{tech.trend_1m:.1f}%）→ 上昇余地が限定的・高値掴みに注意"
+                )
+
         next_earn = fd_raw.get("next_earnings_date")
         if next_earn:
             candidate.key_risks.append(f"次回決算: {next_earn}（決算跨ぎリスク）")
@@ -341,6 +367,10 @@ class StockScreener:
         """
         if not val or not val.upside_pct or val.upside_pct <= 0:
             return None
+
+        # 上昇余地が5%未満はすでに目標圏内とみなす
+        if val.upside_pct < 5:
+            return "すでに目標圏内（利確検討タイミング）"
 
         upside = val.upside_pct / 100  # 小数に変換
 
