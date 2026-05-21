@@ -97,7 +97,8 @@
       "Bash(git --version)",
       "Bash(brew --version)",
       "Bash(brew install *)",
-      "Bash(git init *)"
+      "Bash(git init *)",
+      "Bash(/opt/homebrew/bin/gh secret *)"
     ]
   }
 }
