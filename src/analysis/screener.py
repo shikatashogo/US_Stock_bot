@@ -55,6 +55,15 @@ class Candidate:
     # 利確目標への到達見込み期間
     months_to_target: Optional[str] = None  # 例: "6〜12ヶ月"
 
+    # インサイダー取引（EDGAR Form 4 / 米国株のみ）
+    insider_sentiment:  Optional[str] = None   # "買い越し" / "売り越し" / "中立" / None
+    insider_net_shares: float = 0.0            # 正=買い越し、負=売り越し
+
+    # EPSサプライズ（FMP / 米国株のみ）
+    eps_beat_rate:        Optional[float] = None  # 0.0〜1.0
+    eps_avg_surprise_pct: Optional[float] = None  # 平均サプライズ率（%）
+    eps_total_quarters:   int = 0                 # 集計四半期数
+
     # スクリーニング通過フラグ
     passed_hard_filter: bool = True
     filter_rejection_reason: str = ""
@@ -86,6 +95,8 @@ class StockScreener:
         valuations:   dict[str, ValuationResult],
         raw_fd:       dict[str, dict],
         macro_snap:   Optional[dict] = None,
+        insider_data: Optional[dict] = None,
+        eps_data:     Optional[dict] = None,
     ) -> list[Candidate]:
         """
         全銘柄をスクリーニングして候補リストを返す
@@ -100,6 +111,8 @@ class StockScreener:
             Candidateリスト（スコア降順）
         """
         macro_snap   = macro_snap or {}
+        insider_data = insider_data or {}
+        eps_data     = eps_data or {}
         macro_score  = macro_snap.get("macro_score", 0.0)
         vix          = macro_snap.get("vix_current")
 
@@ -134,14 +147,27 @@ class StockScreener:
                 candidate.filter_rejection_reason = reject_reason
                 continue   # スクリーニング除外
 
+            # インサイダー・EPS情報をCandidateに格納（_build_case より前に設定が必要）
+            ins = insider_data.get(symbol, {})
+            eps = eps_data.get(symbol, {})
+            candidate.insider_sentiment    = ins.get("insider_sentiment")
+            candidate.insider_net_shares   = ins.get("insider_net_shares", 0.0)
+            candidate.eps_beat_rate        = eps.get("eps_beat_rate")
+            candidate.eps_avg_surprise_pct = eps.get("eps_avg_surprise_pct")
+            candidate.eps_total_quarters   = eps.get("eps_total_quarters", 0)
+
             # 複合スコア計算
             beta = fd_raw.get("beta")
             composite = self._calc_composite_score(fd_score, tech, val, macro_score, vix, beta)
-            candidate.composite_score = composite
+
+            # インサイダー・EPS調整（±0.3点程度）
+            composite += self._insider_adj(candidate.insider_sentiment)
+            composite += self._eps_adj(candidate.eps_beat_rate)
+            candidate.composite_score = round(max(0.0, min(10.0, composite)), 2)
 
             # 推奨判定
             candidate.recommendation, candidate.confidence = self._judge_recommendation(
-                composite, fd_score, tech, val
+                candidate.composite_score, fd_score, tech, val
             )
 
             # 推奨根拠の構築
@@ -257,6 +283,28 @@ class StockScreener:
         ) + macro_adj + beta_adj
 
         return round(max(0.0, min(10.0, composite)), 2)
+
+    @staticmethod
+    def _insider_adj(sentiment: Optional[str]) -> float:
+        """インサイダー取引によるスコア調整（-0.3〜+0.3）"""
+        if sentiment == "買い越し":
+            return +0.3
+        if sentiment == "売り越し":
+            return -0.3
+        return 0.0
+
+    @staticmethod
+    def _eps_adj(beat_rate: Optional[float]) -> float:
+        """EPS beat率によるスコア調整（-0.2〜+0.3）"""
+        if beat_rate is None:
+            return 0.0
+        if beat_rate >= 0.80:
+            return +0.3
+        if beat_rate >= 0.60:
+            return +0.1
+        if beat_rate <= 0.30:
+            return -0.2
+        return 0.0
 
     # ─── 推奨判定 ────────────────────────────────────────────────
 
@@ -382,6 +430,33 @@ class StockScreener:
         next_earn = fd_raw.get("next_earnings_date")
         if next_earn:
             candidate.key_risks.append(f"次回決算: {next_earn}（決算跨ぎリスク）")
+
+        # インサイダー取引（買い越し → 強気根拠 / 売り越し → リスク）
+        ins_sent = candidate.insider_sentiment
+        ins_net  = candidate.insider_net_shares
+        if ins_sent == "買い越し" and ins_net:
+            candidate.bull_case.append(
+                f"インサイダー買い越し（直近180日 純買い {ins_net:,.0f}株）"
+            )
+        elif ins_sent == "売り越し" and ins_net:
+            candidate.key_risks.append(
+                f"インサイダー売り越し（直近180日 純売り {abs(ins_net):,.0f}株）"
+            )
+
+        # EPSサプライズ実績（beat傾向 → 強気根拠 / miss傾向 → 弱気根拠）
+        beat_rate = candidate.eps_beat_rate
+        total_q   = candidate.eps_total_quarters
+        avg_surp  = candidate.eps_avg_surprise_pct
+        if beat_rate is not None and total_q >= 2:
+            if beat_rate >= 0.75:
+                msg = f"EPS beat率 {beat_rate:.0%}（過去{total_q}四半期）"
+                if avg_surp is not None:
+                    msg += f"　平均 {avg_surp:+.1f}% 超過"
+                candidate.bull_case.append(msg)
+            elif beat_rate <= 0.30:
+                candidate.bear_case.append(
+                    f"EPS miss傾向（beat率 {beat_rate:.0%} / 過去{total_q}四半期）"
+                )
 
         # 利確目標への到達見込み期間
         candidate.months_to_target = self._estimate_months_to_target(tech, val)

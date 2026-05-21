@@ -149,6 +149,22 @@ def format_report(candidates, macro_snap: dict, season_label: str = "") -> str:
             a_up = (val.analyst_target - val.current_price) / val.current_price * 100
             lines.append(f"   👥 アナリスト目標: {fp(val.analyst_target)} (+{a_up:.1f}%)")
 
+        # インサイダー取引（中立は表示省略）
+        ins_sent = getattr(c, "insider_sentiment", None)
+        if ins_sent and ins_sent != "中立":
+            ins_icon = "🟢" if ins_sent == "買い越し" else "🔴"
+            lines.append(f"   {ins_icon} インサイダー: {ins_sent}")
+
+        # EPSサプライズ beat率
+        eps_rate = getattr(c, "eps_beat_rate", None)
+        eps_q    = getattr(c, "eps_total_quarters", 0)
+        eps_avg  = getattr(c, "eps_avg_surprise_pct", None)
+        if eps_rate is not None and eps_q >= 2:
+            avg_str = f"　平均 {eps_avg:+.1f}%" if eps_avg is not None else ""
+            lines.append(
+                f"   📈 EPS beat率: {eps_rate:.0%}（{eps_q}四半期{avg_str}）"
+            )
+
         if c.bull_case:
             lines.append(f"   🟢 根拠: {c.bull_case[0]}")
         if c.key_risks:

@@ -278,6 +278,34 @@ if run_btn:
                     st.metric("RSI(14)", f"{tech.rsi_14:.0f}")
                     st.caption(f"判定: {tech.rsi_signal}")
 
+                # インサイダー取引（米国株のみ）
+                # getattr でキャッシュ互換性を確保（古いCandidateオブジェクト対策）
+                ins_sent = getattr(c, "insider_sentiment", None)
+                if ins_sent:
+                    ins_icon = (
+                        "🟢" if ins_sent == "買い越し"
+                        else "🔴" if ins_sent == "売り越し"
+                        else "⬜"
+                    )
+                    st.metric("インサイダー動向", f"{ins_icon} {ins_sent}")
+
+                # EPSサプライズ beat率（米国株のみ）
+                eps_rate = getattr(c, "eps_beat_rate", None)
+                if eps_rate is not None:
+                    beat_icon = (
+                        "🟢" if eps_rate >= 0.75
+                        else "🔴" if eps_rate <= 0.30
+                        else "🟡"
+                    )
+                    eps_avg  = getattr(c, "eps_avg_surprise_pct", None)
+                    eps_q    = getattr(c, "eps_total_quarters", 0)
+                    avg_str  = f"　平均 {eps_avg:+.1f}%" if eps_avg is not None else ""
+                    st.metric(
+                        "EPS beat率",
+                        f"{beat_icon} {eps_rate:.0%}（{eps_q}四半期）",
+                        help=f"過去最大8四半期のEPS予想超過率{avg_str}",
+                    )
+
             with col3:
                 st.markdown("**📊 スコア内訳**")
                 st.metric("ファンダ", f"{fd.total_score:.1f}/10（{fd.grade}）")

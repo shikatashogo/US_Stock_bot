@@ -15,6 +15,8 @@ from src.analysis.fundamental import FundamentalAnalyzer
 from src.analysis.screener import StockScreener, filter_recommendations
 from src.analysis.technical import TechnicalAnalyzer
 from src.analysis.valuation import ValuationCalculator
+from src.data.edgar_fetcher import EdgarFetcher
+from src.data.fmp_fetcher import FmpFetcher
 from src.data.macro_fetcher import MacroFetcher
 from src.data.stock_fetcher import StockFetcher
 
@@ -66,6 +68,30 @@ def run_pipeline(
         for s, df in price_data.items()
     }
 
+    # ── インサイダー取引・EPSサプライズ（米国株のみ） ────────────────
+    us_symbols    = [s for s in symbols if not is_japan_stock(s)]
+    insider_data  = {}
+    eps_data      = {}
+
+    if us_symbols:
+        # EDGAR: Form 4 インサイダー取引（完全無料）
+        try:
+            edgar = EdgarFetcher()
+            insider_data = edgar.fetch_universe_insider(
+                us_symbols, use_cache=use_cache
+            )
+        except Exception as e:
+            logger.warning(f"EDGARデータ取得失敗（スキップ）: {e}")
+
+        # FMP: EPSサプライズ（API キー必要 / 未設定時は自動スキップ）
+        try:
+            fmp = FmpFetcher()
+            eps_data = fmp.fetch_universe_eps(
+                us_symbols, use_cache=use_cache
+            )
+        except Exception as e:
+            logger.warning(f"FMPデータ取得失敗（スキップ）: {e}")
+
     screener   = StockScreener()
     candidates = screener.screen(
         fundamentals=fd_scores,
@@ -73,6 +99,8 @@ def run_pipeline(
         valuations=valuations,
         raw_fd=fd_raw_dict,
         macro_snap=macro_snap,
+        insider_data=insider_data,
+        eps_data=eps_data,
     )
     recommended = filter_recommendations(candidates)
     logger.info(f"推奨銘柄: {len(recommended)}銘柄")
