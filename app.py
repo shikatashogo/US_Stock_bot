@@ -92,7 +92,7 @@ with st.sidebar:
 
     st.divider()
     st.caption("💡 ヒント")
-    st.caption("・クイックスキャンは時価総額上位50銘柄")
+    st.caption("・クイックスキャンは日本株25 + 米国株25の上位50銘柄")
     st.caption("・フルスキャンで穴場の中小型株も探せます")
     st.caption("・初回フェッチ後はキャッシュONで高速動作")
 
@@ -115,9 +115,20 @@ def resolve_symbols(mode, scan_mode, custom_symbols, selected_sectors) -> list[s
         all_stocks = {**JAPAN_STOCKS, **US_STOCKS}
         syms = [s for s in syms if all_stocks.get(s, {}).get("sector") in selected_sectors]
 
-    # クイックスキャン: リストの先頭50銘柄（ユニバース定義順 = 大型株優先）
+    # クイックスキャン: 日本株・米国株を均等にサンプリング
+    # 全銘柄モードで syms[:50] すると日本株しか入らないため、地域ごとに按分する
     if "クイック" in scan_mode:
-        syms = syms[:50]
+        if mode == "🌏 全銘柄":
+            jp_syms = get_japan_symbols()
+            us_syms = get_us_symbols()
+            # セクターフィルタが適用されている場合は絞り込み後のリストを使う
+            if selected_sectors:
+                all_stocks = {**JAPAN_STOCKS, **US_STOCKS}
+                jp_syms = [s for s in jp_syms if all_stocks.get(s, {}).get("sector") in selected_sectors]
+                us_syms = [s for s in us_syms if all_stocks.get(s, {}).get("sector") in selected_sectors]
+            syms = jp_syms[:25] + us_syms[:25]  # 日本25 + 米国25 = 50銘柄
+        else:
+            syms = syms[:50]
 
     return syms
 
