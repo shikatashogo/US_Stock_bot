@@ -1,0 +1,122 @@
+name: 株式推奨 Telegram通知
+
+# ─── トリガー ────────────────────────────────────────────────────
+# 決算シーズン月（日本: 2/5/8/11月、米国: 1/4/7/10月）の毎週月曜 08:00 JST
+# GitHub Actions は UTC で動作するため、JST 08:00 = UTC 23:00（前日）
+on:
+  schedule:
+    # 1月: 米国株決算シーズン
+    - cron: "0 23 * 1 0"
+    # 2月: 日本株決算シーズン
+    - cron: "0 23 * 2 0"
+    # 4月: 米国株決算シーズン
+    - cron: "0 23 * 4 0"
+    # 5月: 日本株決算シーズン
+    - cron: "0 23 * 5 0"
+    # 7月: 米国株決算シーズン
+    - cron: "0 23 * 7 0"
+    # 8月: 日本株決算シーズン
+    - cron: "0 23 * 8 0"
+    # 10月: 米国株決算シーズン
+    - cron: "0 23 * 10 0"
+    # 11月: 日本株決算シーズン
+    - cron: "0 23 * 11 0"
+
+  # 手動実行（GitHub UI から "Run workflow" ボタンで実行可能）
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "決算シーズン外でも強制実行"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry Run（通知せず内容を確認）"
+        type: boolean
+        default: false
+      target:
+        description: "分析対象（all / jp / us）"
+        type: choice
+        options:
+          - all
+          - jp
+          - us
+        default: all
+      top_n:
+        description: "通知する上位N銘柄"
+        type: number
+        default: 8
+
+# ─── ジョブ定義 ──────────────────────────────────────────────────
+jobs:
+  notify:
+    name: 推奨銘柄 Telegram通知
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # 1. リポジトリをチェックアウト
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Python セットアップ
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. 依存パッケージインストール
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. 引数を組み立てて実行（手動実行時はinputsを、定期実行時はデフォルト値を使用）
+      - name: Run notify job
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          ARGS=""
+
+          # 手動実行のinputsを処理
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.force }}" = "true" ]; then
+              ARGS="$ARGS --force"
+            fi
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              ARGS="$ARGS --dry-run"
+            fi
+            if [ "${{ inputs.target }}" = "jp" ]; then
+              ARGS="$ARGS --jp"
+            elif [ "${{ inputs.target }}" = "us" ]; then
+              ARGS="$ARGS --us"
+            fi
+            if [ -n "${{ inputs.top_n }}" ]; then
+              ARGS="$ARGS --top ${{ inputs.top_n }}"
+            fi
+          fi
+
+          echo "実行コマンド: python notify_job.py $ARGS"
+          python notify_job.py $ARGS
+
+      # 5. 失敗時のデバッグ情報
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "=== Python version ==="
+          python --version
+          echo "=== Installed packages ==="
+          pip list | grep -E "yfinance|requests|loguru|streamlit"
+          echo "=== Environment (Telegram設定確認) ==="
+          if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "TELEGRAM_BOT_TOKEN: 設定あり"
+          else
+            echo "TELEGRAM_BOT_TOKEN: 未設定 ← Secrets に追加が必要"
+          fi
+          if [ -n "$TELEGRAM_CHAT_ID" ]; then
+            echo "TELEGRAM_CHAT_ID: 設定あり"
+          else
+            echo "TELEGRAM_CHAT_ID: 未設定 ← Secrets に追加が必要"
+          fi
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

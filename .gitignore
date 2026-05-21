@@ -1,0 +1,24 @@
+# 環境変数（絶対にGitHubにあげない）
+.env
+
+# キャッシュ・データ
+data/
+*.pkl
+*.pickle
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Streamlit
+.streamlit/credentials.toml
+
+# Mac
+.DS_Store
+
+# ログ
+*.log
