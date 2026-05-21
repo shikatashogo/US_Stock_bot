@@ -67,8 +67,14 @@ with st.sidebar:
 
     top_n = st.slider("推奨銘柄の表示上限", min_value=3, max_value=20, value=8)
 
-    use_cache = st.checkbox("キャッシュを使用（高速）", value=False,
-                            help="ONなら2回目以降は数秒で完了。最新データが必要な場合はOFF")
+    use_cache = st.checkbox(
+        "前回の分析結果を再利用（高速）", value=False,
+        help=(
+            "ON: 前回の分析結果をそのまま表示（数秒で完了）\n"
+            "OFF: 分析を再実行（株価データは24時間以内のキャッシュを使用）\n"
+            "※ 株価の生データは常にキャッシュ経由で取得。yfinanceの制限を回避するため。"
+        ),
+    )
 
     run_btn = st.button("▶ 分析を実行", type="primary", use_container_width=True)
 
@@ -139,7 +145,9 @@ if run_btn:
         key = ",".join(sorted(symbols))
         if not use_cache:
             run_cached.clear()
-        candidates, macro_snap = run_cached(key, use_cache)
+        # pickleキャッシュは常に有効（yfinanceのレート制限を回避するため）
+        # Streamlitキャッシュ（上のclear）とpickleキャッシュは独立して制御する
+        candidates, macro_snap = run_cached(key, use_cache=True)
 
     # ── マクロ環境 ───────────────────────────────────────────────
     st.subheader("🌐 マクロ環境")
