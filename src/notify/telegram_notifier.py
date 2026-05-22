@@ -90,7 +90,7 @@ class TelegramNotifier:
 
     def test_connection(self) -> bool:
         """接続テスト用にシンプルなメッセージを送信"""
-        return self.send("✅ 株式推奨Bot接続テスト成功")
+        return self.send("✅ スクリーニングBot接続テスト成功")
 
 
 def format_report(candidates, macro_snap: dict, season_label: str = "") -> str:

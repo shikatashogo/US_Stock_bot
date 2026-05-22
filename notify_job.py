@@ -94,7 +94,7 @@ def next_earnings_season() -> str:
 # ─── メイン ─────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="株式推奨Bot 自動通知ジョブ")
+    parser = argparse.ArgumentParser(description="スクリーニングBot 自動通知ジョブ")
     parser.add_argument("--force",   action="store_true", help="決算シーズン外でも強制実行")
     parser.add_argument("--test",    action="store_true", help="Telegram接続テストのみ")
     parser.add_argument("--dry-run", action="store_true", help="通知せず内容だけ表示")
