@@ -145,6 +145,19 @@ def run_cached(symbols_key: str, use_cache: bool):
     return run_pipeline(symbols, use_cache=use_cache)
 
 
+# ─── テンバガーパイプライン（モジュールレベル・チャンク対応） ────────
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def run_tb_cached(syms_key: str, cache: bool, workers: int):
+    """テンバガースクリーニング（チャンク単位でキャッシュ）"""
+    syms = syms_key.split(",")
+    from src.data.macro_fetcher import MacroFetcher
+    _usdjpy = MacroFetcher().get_macro_snapshot(use_cache=True).get("usdjpy_current", 150.0)
+    return run_tenbagger_pipeline(
+        syms, use_cache=cache, usdjpy=_usdjpy, max_workers=workers
+    )
+
+
 # ─── タブ ────────────────────────────────────────────────────────
 
 tab1, tab2 = st.tabs(["📊 推奨スクリーニング", "🚀 テンバガー候補"])
@@ -440,28 +453,39 @@ with tab2:
             usdjpy = 150.0
 
         is_large_scan = len(tb_syms) > 100
-        spinner_msg = (
-            f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中...\n"
-            f"{'（並列処理中・しばらくお待ちください）' if is_large_scan else ''}"
-        )
+        workers = 8 if is_large_scan else 5
 
-        with st.spinner(spinner_msg):
-            @st.cache_data(ttl=3600, show_spinner=False)
-            def run_tb_cached(syms_key: str, cache: bool, workers: int):
-                syms = syms_key.split(",")
-                from src.data.macro_fetcher import MacroFetcher
-                _usdjpy = MacroFetcher().get_macro_snapshot(use_cache=True).get("usdjpy_current", 150.0)
-                return run_tenbagger_pipeline(
-                    syms, use_cache=cache, usdjpy=_usdjpy, max_workers=workers
-                )
+        if not tb_cache:
+            run_tb_cached.clear()
 
-            if not tb_cache:
-                run_tb_cached.clear()
-
-            # 大量銘柄は並列数を増やす
-            workers = 8 if is_large_scan else 5
-            tb_key = ",".join(sorted(tb_syms))
-            tb_results = run_tb_cached(tb_key, tb_cache, workers)
+        # ── チャンク分割スキャン（タイムアウト対策） ──────────────────
+        CHUNK_SIZE = 50
+        if is_large_scan:
+            chunks = [
+                tb_syms[i : i + CHUNK_SIZE]
+                for i in range(0, len(tb_syms), CHUNK_SIZE)
+            ]
+            prog_bar = st.progress(0.0, text=f"0 / {len(tb_syms)} 銘柄処理済み")
+            status_ph = st.empty()
+            all_results: list = []
+            processed = 0
+            for chunk_idx, chunk in enumerate(chunks):
+                lo = chunk_idx * CHUNK_SIZE + 1
+                hi = min(lo + CHUNK_SIZE - 1, len(tb_syms))
+                status_ph.caption(f"🔄 {lo}〜{hi} 銘柄目を処理中... ({hi}/{len(tb_syms)})")
+                chunk_key = ",".join(sorted(chunk))
+                chunk_results = run_tb_cached(chunk_key, tb_cache, workers)
+                all_results.extend(chunk_results)
+                processed += len(chunk)
+                prog_bar.progress(processed / len(tb_syms), text=f"{processed} / {len(tb_syms)} 銘柄処理済み")
+            prog_bar.empty()
+            status_ph.empty()
+            # スコア降順で再ソート
+            tb_results = sorted(all_results, key=lambda x: x.total_score, reverse=True)
+        else:
+            with st.spinner(f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中..."):
+                tb_key = ",".join(sorted(tb_syms))
+                tb_results = run_tb_cached(tb_key, tb_cache, workers)
 
         if not tb_results:
             st.warning(
