@@ -343,43 +343,43 @@ US_STOCKS: dict[str, dict] = {
 TENBAGGER_STOCKS: dict[str, dict] = {
 
     # ── 東証グロース：SaaS / クラウド ────────────────────────────
+    # ※ コードはJPX公式データで照合済み（2026年4月末時点）
     "4478": {"name": "フリー",                       "sector": "SaaS",         "market": "growth"},
     "4475": {"name": "HENNGE",                       "sector": "SaaS",         "market": "growth"},
     "4477": {"name": "BASE",                         "sector": "SaaS",         "market": "growth"},
     "4496": {"name": "コマースOneホールディングス",   "sector": "SaaS",         "market": "growth"},
     "3923": {"name": "ラクス",                       "sector": "SaaS",         "market": "prime"},
-    # "7032": アドベンチャー → 上場廃止のためコメントアウト
     "4441": {"name": "トビラシステムズ",             "sector": "SaaS",         "market": "growth"},
-    "4495": {"name": "iRet",                         "sector": "SaaS",         "market": "growth"},
+    "4495": {"name": "アイキューブドシステムズ",     "sector": "SaaS",         "market": "growth"},
     "3697": {"name": "SHIFT",                        "sector": "SaaS",         "market": "prime"},
     "4443": {"name": "Sansan",                       "sector": "SaaS",         "market": "prime"},
 
     # ── 東証グロース：AI / DX ────────────────────────────────────
-    "4388": {"name": "AI inside",                    "sector": "AI",           "market": "growth"},
-    "4170": {"name": "カラクリ",                     "sector": "AI",           "market": "growth"},
-    "4382": {"name": "HEROZ",                        "sector": "AI",           "market": "growth"},
-    "4449": {"name": "Gaiax",                        "sector": "AI",           "market": "growth"},
+    "4388": {"name": "エーアイ",                     "sector": "AI",           "market": "standard"},
+    "4170": {"name": "Kaizen Platform",              "sector": "AI",           "market": "growth"},
+    "4382": {"name": "HEROZ",                        "sector": "AI",           "market": "standard"},
     "6532": {"name": "ベイカレント・コンサルティング","sector": "AI",           "market": "prime"},
     "6088": {"name": "シグマクシス・HD",             "sector": "AI",           "market": "prime"},
     "4326": {"name": "インテージHD",                 "sector": "AI",           "market": "prime"},
+    # 4449 → ギフティ（EC/デジタルギフト）/ 4449 Gaiaxは上場廃止のため除外
 
     # ── 東証グロース：医療DX / ヘルステック ─────────────────────
     "4480": {"name": "メドレー",                     "sector": "医療DX",       "market": "prime"},
-    "4565": {"name": "ヘリオス",                     "sector": "医療DX",       "market": "growth"},
+    "4593": {"name": "ヘリオス",                     "sector": "医療DX",       "market": "growth"},
     "9229": {"name": "サンウェルズ",                 "sector": "医療DX",       "market": "growth"},
     "7077": {"name": "ALiNKインターネット",          "sector": "医療DX",       "market": "growth"},
     # 6095 メドピア / 4489 ペイロール → yfinance取得不可のため除外
 
     # ── 東証グロース：フィンテック / HR ─────────────────────────
-    "9552": {"name": "M&Aリサーチインスティテュート", "sector": "フィンテック", "market": "growth"},
     "4483": {"name": "JMDC",                         "sector": "フィンテック", "market": "prime"},
-    "4448": {"name": "チャットワーク",               "sector": "SaaS",         "market": "growth"},
+    "4448": {"name": "kubell（旧チャットワーク）",   "sector": "SaaS",         "market": "growth"},
     "6200": {"name": "インソース",                   "sector": "HR",           "market": "prime"},
+    # 9552 → クオンツ総研HD（M&Aリサーチとは別会社）→ 除外
     # 7342 ウェルスナビ / 4485 JTOWER → yfinance取得不可のため除外
 
     # ── 東証グロース：エネルギーDX / 脱炭素 ─────────────────────
     "4169": {"name": "ENECHANGE",                    "sector": "エネルギーDX", "market": "growth"},
-    "9223": {"name": "Acroquest Technology",         "sector": "DX",           "market": "growth"},
+    # 9223 → ASNOVA（レンタカー）/ Acroquest Technologyは上場廃止のため除外
 
     # ── 東証グロース：半導体周辺・ハード ─────────────────────────
     "6254": {"name": "野村マイクロ・サイエンス",     "sector": "半導体",       "market": "prime"},
