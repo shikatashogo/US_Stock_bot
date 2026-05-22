@@ -27,5 +27,9 @@ loguru>=0.7.0
 # Web UI
 streamlit>=1.35.0
 
+# JPX上場銘柄一覧（Excel読み込み）
+xlrd>=2.0.1
+openpyxl>=3.1.0
+
 # テスト
 pytest>=8.0.0

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pickle
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -490,28 +491,37 @@ class TenbaggerFetcher:
         tech_dict: dict,
         usdjpy: float = 150.0,
         use_cache: bool = True,
+        max_workers: int = 5,
     ) -> dict[str, TenbaggerRawData]:
-        """複数銘柄のテンバガーデータを順次取得"""
+        """
+        複数銘柄のテンバガーデータを並列取得。
+
+        Args:
+            max_workers: 並列数（yfinance過負荷防止のため5が推奨）
+        """
         result: dict[str, TenbaggerRawData] = {}
 
-        for symbol in symbols:
+        class _EmptySig:
+            above_ma200 = None
+            volume_ratio = None
+            pct_from_52w_high = None
+
+        def _fetch_one(symbol: str):
             fd = fd_dict.get(symbol, {})
-            tech_sig = tech_dict.get(symbol)
-            if tech_sig is None:
-                # ダミーのテクニカルシグナル
-                class _EmptySig:
-                    above_ma200 = None
-                    volume_ratio = None
-                    pct_from_52w_high = None
-                tech_sig = _EmptySig()
+            tech_sig = tech_dict.get(symbol) or _EmptySig()
+            return symbol, self.fetch(
+                symbol, fd, tech_sig, usdjpy=usdjpy, use_cache=use_cache
+            )
 
-            try:
-                data = self.fetch(symbol, fd, tech_sig, usdjpy=usdjpy, use_cache=use_cache)
-                result[symbol] = data
-            except Exception as e:
-                logger.error(f"[{symbol}] テンバガーデータ取得失敗（スキップ）: {e}")
-
-            time.sleep(0.1)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_fetch_one, s): s for s in symbols}
+            for future in as_completed(futures):
+                sym = futures[future]
+                try:
+                    sym_out, data = future.result()
+                    result[sym_out] = data
+                except Exception as e:
+                    logger.debug(f"[{sym}] テンバガーデータ取得失敗（スキップ）: {e}")
 
         logger.info(f"テンバガーデータ一括取得完了: {len(result)}/{len(symbols)} 銘柄")
         return result

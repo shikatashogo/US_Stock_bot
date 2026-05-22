@@ -438,22 +438,36 @@ def run_tenbagger_pipeline(
     symbols: list[str],
     use_cache: bool = True,
     usdjpy: float = 150.0,
+    max_workers: int = 5,
 ) -> list[TenbaggerResult]:
-    """テンバガー候補抽出パイプライン（エントリーポイント）"""
+    """
+    テンバガー候補抽出パイプライン（エントリーポイント）
+
+    Args:
+        symbols    : 対象銘柄リスト
+        use_cache  : キャッシュ使用（False で強制再取得）
+        usdjpy     : ドル円レート（時価総額の円換算用）
+        max_workers: 並列取得スレッド数（大量銘柄時は5推奨）
+    """
     from src.data.stock_fetcher import StockFetcher
     from src.analysis.technical import TechnicalAnalyzer
     from src.data.tenbagger_fetcher import TenbaggerFetcher
 
     fetcher = StockFetcher()
-    price_data = fetcher.fetch_universe_prices(symbols, use_cache=use_cache)
-    fd_dict = fetcher.fetch_universe_fundamentals(symbols, use_cache=use_cache)
+    price_data = fetcher.fetch_universe_prices(
+        symbols, use_cache=use_cache, max_workers=max_workers * 2
+    )
+    fd_dict = fetcher.fetch_universe_fundamentals(
+        symbols, use_cache=use_cache, max_workers=max_workers * 2
+    )
 
     ta = TechnicalAnalyzer()
     tech_dict = {s: ta.analyze(s, df) for s, df in price_data.items()}
 
     tb_fetcher = TenbaggerFetcher()
     raw_data = tb_fetcher.fetch_universe(
-        symbols, fd_dict, tech_dict, usdjpy=usdjpy, use_cache=use_cache
+        symbols, fd_dict, tech_dict,
+        usdjpy=usdjpy, use_cache=use_cache, max_workers=max_workers
     )
 
     screener = TenbaggerScreener()

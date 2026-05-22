@@ -19,6 +19,7 @@ from config.universe import (
     get_tenbagger_symbols, get_tenbagger_japan_symbols, get_tenbagger_us_symbols,
     TENBAGGER_STOCKS,
 )
+from src.data.jpx_universe_fetcher import JpxUniverseFetcher
 from src.analysis.pipeline import run_pipeline
 from src.analysis.tenbagger_screener import run_tenbagger_pipeline
 
@@ -361,10 +362,21 @@ with tab2:
         "**グロース特化**（推奨）は東証グロース・スタンダード小型株＋米国中小型成長株の専用ユニバースを使用します。"
     )
 
+    # JPX銘柄数を取得（キャッシュ使用でサイドバー表示用）
+    @st.cache_data(ttl=86400, show_spinner=False)
+    def _get_jpx_summary():
+        try:
+            return JpxUniverseFetcher().get_listing_summary(use_cache=True)
+        except Exception:
+            return None
+
+    jpx_summary = _get_jpx_summary()
+    growth_count = jpx_summary["growth_valid"] if jpx_summary else "約490"
+    growth_tb_count = jpx_summary["growth_tenbagger_sector"] if jpx_summary else "約380"
+
     st.info(
-        f"💡 **グロース特化ユニバース**: {len(TENBAGGER_STOCKS)}銘柄（東証グロース小型株・米国中小型成長株）を専用収録。"
-        "「推奨スクリーニング」の大型株ユニバースとは別リストです。",
-        icon="🔍",
+        f"💡 **東証グロース全銘柄スキャン** では JPX公式データから **{growth_count}銘柄**（情報通信・サービス等に絞ると {growth_tb_count}銘柄）を自動取得してスクリーニングします。"
+        f"  手動キュレーション済みの **グロース特化ユニバース**（{len(TENBAGGER_STOCKS)}銘柄）も選択できます。",
     )
 
     tc1, tc2, tc3 = st.columns([3, 2, 2])
@@ -372,7 +384,9 @@ with tab2:
         tb_mode = st.radio(
             "対象ユニバース",
             [
-                "🌱 グロース特化（推奨）",
+                "🔍 東証グロース全銘柄（JPX公式・テンバガー向け業種）",
+                "🔍 東証グロース全銘柄（JPX公式・全業種）",
+                "🌱 グロース特化ユニバース（手動厳選）",
                 "🇯🇵 グロース特化・日本株のみ",
                 "🇺🇸 グロース特化・米国株のみ",
                 "🇯🇵 通常ユニバース・日本株",
@@ -388,7 +402,25 @@ with tab2:
 
     if tb_run:
         # 対象銘柄を解決
-        if tb_mode == "🌱 グロース特化（推奨）":
+        jpx_fetcher = JpxUniverseFetcher()
+
+        if tb_mode == "🔍 東証グロース全銘柄（JPX公式・テンバガー向け業種）":
+            with st.spinner("📥 JPX上場銘柄一覧を取得中..."):
+                tb_syms = jpx_fetcher.get_growth_symbols(
+                    tenbagger_sector_only=True, use_cache=tb_cache
+                )
+            est_min = max(1, len(tb_syms) // 60)
+            st.caption(f"対象: {len(tb_syms)}銘柄（情報通信・サービス・医薬等）| 推定時間: 約{est_min}〜{est_min*2}分")
+
+        elif tb_mode == "🔍 東証グロース全銘柄（JPX公式・全業種）":
+            with st.spinner("📥 JPX上場銘柄一覧を取得中..."):
+                tb_syms = jpx_fetcher.get_growth_symbols(
+                    tenbagger_sector_only=False, use_cache=tb_cache
+                )
+            est_min = max(1, len(tb_syms) // 60)
+            st.caption(f"対象: {len(tb_syms)}銘柄（全業種）| 推定時間: 約{est_min}〜{est_min*2}分")
+
+        elif tb_mode == "🌱 グロース特化ユニバース（手動厳選）":
             tb_syms = get_tenbagger_symbols()
         elif tb_mode == "🇯🇵 グロース特化・日本株のみ":
             tb_syms = get_tenbagger_japan_symbols()
@@ -407,23 +439,34 @@ with tab2:
         except NameError:
             usdjpy = 150.0
 
-        with st.spinner(f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中... (数分かかる場合があります)"):
+        is_large_scan = len(tb_syms) > 100
+        spinner_msg = (
+            f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中...\n"
+            f"{'（並列処理中・しばらくお待ちください）' if is_large_scan else ''}"
+        )
+
+        with st.spinner(spinner_msg):
             @st.cache_data(ttl=3600, show_spinner=False)
-            def run_tb_cached(syms_key, cache):
+            def run_tb_cached(syms_key: str, cache: bool, workers: int):
                 syms = syms_key.split(",")
                 from src.data.macro_fetcher import MacroFetcher
                 _usdjpy = MacroFetcher().get_macro_snapshot(use_cache=True).get("usdjpy_current", 150.0)
-                return run_tenbagger_pipeline(syms, use_cache=cache, usdjpy=_usdjpy)
+                return run_tenbagger_pipeline(
+                    syms, use_cache=cache, usdjpy=_usdjpy, max_workers=workers
+                )
 
             if not tb_cache:
                 run_tb_cached.clear()
+
+            # 大量銘柄は並列数を増やす
+            workers = 8 if is_large_scan else 5
             tb_key = ",".join(sorted(tb_syms))
-            tb_results = run_tb_cached(tb_key, tb_cache)
+            tb_results = run_tb_cached(tb_key, tb_cache, workers)
 
         if not tb_results:
             st.warning(
                 "55点以上の候補が見つかりませんでした。\n\n"
-                "💡 **グロース特化（推奨）** を選択することで東証グロース小型株が対象になります。"
+                "💡 **東証グロース全銘柄（テンバガー向け業種）** を選ぶと最も多くの候補が見つかります。"
             )
         else:
             st.success(f"**{len(tb_syms)}銘柄**を分析 → **{len(tb_results)}銘柄**がテンバガー候補（55点以上）")
