@@ -17,7 +17,7 @@ TenbaggerRawData を受け取り、定量スコアリングで
   THEME             10pt
   CHART             10pt
 
-合格ライン: 70点以上
+合格ライン: 60点以上（データ不足による失点を考慮）
 """
 from __future__ import annotations
 
@@ -287,11 +287,11 @@ class TenbaggerScreener:
 
     def _assign_grade(self, score: float) -> tuple[str, bool]:
         """スコアからグレードと合格フラグを決定"""
-        if score >= 90:
-            return "超有力テンバガー候補", True
         if score >= 80:
-            return "有力テンバガー候補", True
+            return "超有力テンバガー候補", True
         if score >= 70:
+            return "有力テンバガー候補", True
+        if score >= 55:
             return "テンバガー監視候補", True
         return "対象外", False
 
@@ -398,11 +398,12 @@ class TenbaggerScreener:
         fd_dict: dict[str, dict],
     ) -> list[TenbaggerResult]:
         """
-        全銘柄をスクリーニングし、70点以上の候補を返す（スコア降順）。
+        全銘柄をスクリーニングし、55点以上の候補を返す（スコア降順）。
 
         除外条件:
           - 除外セクター（金融・不動産等）
-          - 時価総額 < 50億円 または > 10000億円（データあり時のみ除外）
+          - 時価総額 < 50億円（データあり時のみ除外）
+          ※ 上限なし: 大型株はSIZEスコア0となり自然に低評価される
         """
         results: list[TenbaggerResult] = []
 
@@ -412,10 +413,10 @@ class TenbaggerScreener:
                 logger.debug(f"[{symbol}] セクター除外: {raw.sector}")
                 continue
 
-            # 時価総額除外（None はスキップしない）
+            # 時価総額下限除外（上限は設けず、スコアで評価）
             mc = raw.market_cap_oku_jpy
-            if mc is not None and (mc < 50 or mc > 10000):
-                logger.debug(f"[{symbol}] 時価総額除外: {mc:.0f}億円")
+            if mc is not None and mc < 50:
+                logger.debug(f"[{symbol}] 時価総額除外（下限未満）: {mc:.0f}億円")
                 continue
 
             result = self.evaluate(raw)
@@ -427,7 +428,7 @@ class TenbaggerScreener:
                 results.append(result)
 
         results.sort(key=lambda x: x.total_score, reverse=True)
-        logger.info(f"テンバガースクリーニング完了: {len(results)}銘柄が70点以上")
+        logger.info(f"テンバガースクリーニング完了: {len(results)}銘柄が55点以上")
         return results
 
 

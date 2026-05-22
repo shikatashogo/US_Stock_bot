@@ -354,7 +354,7 @@ with tab1:
 
 with tab2:
     st.markdown("#### テンバガー候補スクリーニング")
-    st.caption("今後3〜10年で株価10倍以上の可能性がある銘柄を定量条件で抽出します。70点以上のみ表示。")
+    st.caption("今後3〜10年で株価10倍以上の可能性がある銘柄を定量条件で抽出します。55点以上のみ表示（100点満点）。")
 
     tc1, tc2, tc3 = st.columns([2, 2, 2])
     with tc1:
@@ -400,15 +400,15 @@ with tab2:
             tb_results = run_tb_cached(tb_key, tb_cache)
 
         if not tb_results:
-            st.warning("70点以上の候補が見つかりませんでした。スキャン範囲を広げるか、条件を確認してください。")
+            st.warning("55点以上の候補が見つかりませんでした。スキャン範囲を広げるか、条件を確認してください。")
         else:
-            st.success(f"**{len(tb_syms)}銘柄**を分析 → **{len(tb_results)}銘柄**がテンバガー候補（70点以上）")
+            st.success(f"**{len(tb_syms)}銘柄**を分析 → **{len(tb_results)}銘柄**がテンバガー候補（55点以上）")
 
             # サマリーテーブル
             with st.expander("📊 テンバガー候補 一覧", expanded=True):
                 tb_rows = []
                 for rank, r in enumerate(tb_results, 1):
-                    grade_icon = "🔥" if r.total_score >= 90 else "⭐" if r.total_score >= 80 else "👀"
+                    grade_icon = "🔥" if r.total_score >= 80 else "⭐" if r.total_score >= 70 else "👀"
                     tb_rows.append({
                         "順位": f"{grade_icon} {rank}",
                         "銘柄": f"{r.name}（{r.symbol}）",
@@ -426,7 +426,7 @@ with tab2:
 
             # 詳細カード
             for rank, r in enumerate(tb_results, 1):
-                grade_icon = "🔥" if r.total_score >= 90 else "⭐" if r.total_score >= 80 else "👀"
+                grade_icon = "🔥" if r.total_score >= 85 else "⭐" if r.total_score >= 75 else "👀"
                 header = f"{grade_icon} **{rank}位 {r.name}（{r.symbol}）** — {r.grade}  スコア: {r.total_score:.0f}/100"
                 with st.expander(header, expanded=(rank <= 3)):
                     d1, d2 = st.columns(2)

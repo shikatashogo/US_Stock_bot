@@ -357,11 +357,16 @@ class TenbaggerFetcher:
                                 pass
                             return None
 
+                        # None で上書きしないよう、計算成功時のみ代入
                         if len(op_row) >= 1 and len(rev_row) >= 1:
-                            op_margin_current = _calc_margin(op_row.iloc[0], rev_row.iloc[0])
+                            _m = _calc_margin(op_row.iloc[0], rev_row.iloc[0])
+                            if _m is not None:
+                                op_margin_current = _m
 
                         if len(op_row) >= 5 and len(rev_row) >= 5:
-                            op_margin_1y_ago = _calc_margin(op_row.iloc[4], rev_row.iloc[4])
+                            _m1y = _calc_margin(op_row.iloc[4], rev_row.iloc[4])
+                            if _m1y is not None:
+                                op_margin_1y_ago = _m1y
 
             except Exception as e:
                 logger.debug(f"[{symbol}] 四半期財務データ取得失敗: {e}")
@@ -376,6 +381,65 @@ class TenbaggerFetcher:
                         shares_3y_ago = float(shares_hist.iloc[0])
             except Exception as e:
                 logger.debug(f"[{symbol}] 株式数履歴取得失敗: {e}")
+
+            # ── ROIC フォールバック（ROEを代替使用） ────────────────────
+            if roic is None:
+                roe = fd.get("roe")
+                if roe is not None:
+                    roic = roe  # ROEをROICの代理指標として使用
+                    logger.debug(f"[{symbol}] ROIC: ROEをフォールバック使用 ({roe:.2%})")
+
+            # ── 年次データフォールバック ────────────────────────────
+            # 四半期データが不足している場合、年次データで補完
+            if revenue_growth_current is None:
+                # yfinance info の revenueGrowth (TTM YoY) を使う
+                rg = fd.get("revenue_growth")
+                if rg is not None:
+                    revenue_growth_current = rg
+                    logger.debug(f"[{symbol}] 売上成長率: 年次フォールバック使用 ({rg:.2%})")
+
+            if revenue_growth_4q_ago is None or op_margin_1y_ago is None:
+                try:
+                    ann = ticker.income_stmt
+                    if ann is not None and not ann.empty and ann.shape[1] >= 2:
+                        def _safe_f(val) -> Optional[float]:
+                            try:
+                                v = float(val)
+                                return v if v == v else None  # NaN check
+                            except (TypeError, ValueError):
+                                return None
+
+                        rev_ann = None
+                        for key in ["Total Revenue", "Revenue"]:
+                            if key in ann.index:
+                                rev_ann = ann.loc[key]
+                                break
+
+                        op_ann = None
+                        for key in ["Operating Income", "Ebit"]:
+                            if key in ann.index:
+                                op_ann = ann.loc[key]
+                                break
+
+                        # revenue_growth_4q_ago: 前年の成長率（加速度判定用）
+                        if revenue_growth_4q_ago is None and rev_ann is not None and len(rev_ann) >= 3:
+                            r0 = _safe_f(rev_ann.iloc[0])
+                            r1 = _safe_f(rev_ann.iloc[1])
+                            r2 = _safe_f(rev_ann.iloc[2])
+                            if r1 is not None and r2 is not None and r2 != 0:
+                                revenue_growth_4q_ago = (r1 - r2) / abs(r2)
+                                logger.debug(f"[{symbol}] 加速度比較: 年次フォールバック使用")
+
+                        # op_margin_1y_ago フォールバック
+                        if op_margin_1y_ago is None and op_ann is not None and rev_ann is not None:
+                            if len(op_ann) >= 2 and len(rev_ann) >= 2:
+                                op1 = _safe_f(op_ann.iloc[1])
+                                rv1 = _safe_f(rev_ann.iloc[1])
+                                if op1 is not None and rv1 is not None and rv1 != 0:
+                                    op_margin_1y_ago = op1 / rv1
+                                    logger.debug(f"[{symbol}] 営業利益率前年: 年次フォールバック使用")
+                except Exception as e:
+                    logger.debug(f"[{symbol}] 年次フォールバック取得失敗: {e}")
 
         except Exception as e:
             logger.warning(f"[{symbol}] テンバガーデータ取得エラー: {e}")
