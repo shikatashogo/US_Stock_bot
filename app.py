@@ -16,6 +16,8 @@ import streamlit as st
 from config.universe import (
     JAPAN_STOCKS, US_STOCKS,
     get_all_symbols, get_japan_symbols, get_us_symbols, total_count,
+    get_tenbagger_symbols, get_tenbagger_japan_symbols, get_tenbagger_us_symbols,
+    TENBAGGER_STOCKS,
 )
 from src.analysis.pipeline import run_pipeline
 from src.analysis.tenbagger_screener import run_tenbagger_pipeline
@@ -353,32 +355,51 @@ with tab1:
 # ─── テンバガー候補（tab2） ───────────────────────────────────────
 
 with tab2:
-    st.markdown("#### テンバガー候補スクリーニング")
-    st.caption("今後3〜10年で株価10倍以上の可能性がある銘柄を定量条件で抽出します。55点以上のみ表示（100点満点）。")
+    st.markdown("#### 🚀 テンバガー候補スクリーニング")
+    st.caption(
+        "今後3〜10年で株価10倍以上の可能性がある銘柄を定量スコアで抽出します。"
+        "**グロース特化**（推奨）は東証グロース・スタンダード小型株＋米国中小型成長株の専用ユニバースを使用します。"
+    )
 
-    tc1, tc2, tc3 = st.columns([2, 2, 2])
+    st.info(
+        f"💡 **グロース特化ユニバース**: {len(TENBAGGER_STOCKS)}銘柄（東証グロース小型株・米国中小型成長株）を専用収録。"
+        "「推奨スクリーニング」の大型株ユニバースとは別リストです。",
+        icon="🔍",
+    )
+
+    tc1, tc2, tc3 = st.columns([3, 2, 2])
     with tc1:
-        tb_mode = st.radio("対象市場", ["🇯🇵 日本株", "🇺🇸 米国株", "🌏 全銘柄"], key="tb_mode")
+        tb_mode = st.radio(
+            "対象ユニバース",
+            [
+                "🌱 グロース特化（推奨）",
+                "🇯🇵 グロース特化・日本株のみ",
+                "🇺🇸 グロース特化・米国株のみ",
+                "🇯🇵 通常ユニバース・日本株",
+                "🇺🇸 通常ユニバース・米国株",
+                "🌏 通常ユニバース・全銘柄",
+            ],
+            key="tb_mode",
+        )
     with tc2:
-        tb_scan = st.radio("スキャン範囲", ["⚡ クイック（上位50銘柄）", "🔬 フル"], key="tb_scan")
-    with tc3:
         tb_cache = st.checkbox("キャッシュ使用", value=True, key="tb_cache")
+    with tc3:
         tb_run = st.button("🚀 テンバガー候補を探す", type="primary", key="tb_run")
 
     if tb_run:
         # 対象銘柄を解決
-        if tb_mode == "🇯🇵 日本株":
+        if tb_mode == "🌱 グロース特化（推奨）":
+            tb_syms = get_tenbagger_symbols()
+        elif tb_mode == "🇯🇵 グロース特化・日本株のみ":
+            tb_syms = get_tenbagger_japan_symbols()
+        elif tb_mode == "🇺🇸 グロース特化・米国株のみ":
+            tb_syms = get_tenbagger_us_symbols()
+        elif tb_mode == "🇯🇵 通常ユニバース・日本株":
             tb_syms = get_japan_symbols()
-        elif tb_mode == "🇺🇸 米国株":
+        elif tb_mode == "🇺🇸 通常ユニバース・米国株":
             tb_syms = get_us_symbols()
         else:
             tb_syms = get_all_symbols()
-
-        if "クイック" in tb_scan:
-            if tb_mode == "🌏 全銘柄":
-                tb_syms = get_japan_symbols()[:25] + get_us_symbols()[:25]
-            else:
-                tb_syms = tb_syms[:50]
 
         # macro_snap は tab1 の実行後に存在する場合のみ使用
         try:
@@ -386,7 +407,7 @@ with tab2:
         except NameError:
             usdjpy = 150.0
 
-        with st.spinner(f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中..."):
+        with st.spinner(f"🔍 {len(tb_syms)}銘柄をテンバガー基準で分析中... (数分かかる場合があります)"):
             @st.cache_data(ttl=3600, show_spinner=False)
             def run_tb_cached(syms_key, cache):
                 syms = syms_key.split(",")
@@ -400,7 +421,10 @@ with tab2:
             tb_results = run_tb_cached(tb_key, tb_cache)
 
         if not tb_results:
-            st.warning("55点以上の候補が見つかりませんでした。スキャン範囲を広げるか、条件を確認してください。")
+            st.warning(
+                "55点以上の候補が見つかりませんでした。\n\n"
+                "💡 **グロース特化（推奨）** を選択することで東証グロース小型株が対象になります。"
+            )
         else:
             st.success(f"**{len(tb_syms)}銘柄**を分析 → **{len(tb_results)}銘柄**がテンバガー候補（55点以上）")
 

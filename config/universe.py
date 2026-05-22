@@ -337,6 +337,78 @@ US_STOCKS: dict[str, dict] = {
     "SPG":   {"name": "Simon Property",   "sector": "Real Estate",  "market": "NYSE"},
 }
 
+# ─── テンバガー専用ユニバース ───────────────────────────────────
+# 東証グロース・スタンダード小型成長株 + 米国中小型成長株
+# 選定基準: 時価総額50〜5000億円前後、高成長テーマ、yfinance取得可能
+TENBAGGER_STOCKS: dict[str, dict] = {
+
+    # ── 東証グロース：SaaS / クラウド ────────────────────────────
+    "4478": {"name": "フリー",                       "sector": "SaaS",         "market": "growth"},
+    "4475": {"name": "HENNGE",                       "sector": "SaaS",         "market": "growth"},
+    "4477": {"name": "BASE",                         "sector": "SaaS",         "market": "growth"},
+    "4496": {"name": "コマースOneホールディングス",   "sector": "SaaS",         "market": "growth"},
+    "3923": {"name": "ラクス",                       "sector": "SaaS",         "market": "prime"},
+    # "7032": アドベンチャー → 上場廃止のためコメントアウト
+    "4441": {"name": "トビラシステムズ",             "sector": "SaaS",         "market": "growth"},
+    "4495": {"name": "iRet",                         "sector": "SaaS",         "market": "growth"},
+    "3697": {"name": "SHIFT",                        "sector": "SaaS",         "market": "prime"},
+    "4443": {"name": "Sansan",                       "sector": "SaaS",         "market": "prime"},
+
+    # ── 東証グロース：AI / DX ────────────────────────────────────
+    "4388": {"name": "AI inside",                    "sector": "AI",           "market": "growth"},
+    "4170": {"name": "カラクリ",                     "sector": "AI",           "market": "growth"},
+    "4382": {"name": "HEROZ",                        "sector": "AI",           "market": "growth"},
+    "4449": {"name": "Gaiax",                        "sector": "AI",           "market": "growth"},
+    "6532": {"name": "ベイカレント・コンサルティング","sector": "AI",           "market": "prime"},
+    "6088": {"name": "シグマクシス・HD",             "sector": "AI",           "market": "prime"},
+    "4326": {"name": "インテージHD",                 "sector": "AI",           "market": "prime"},
+
+    # ── 東証グロース：医療DX / ヘルステック ─────────────────────
+    "4480": {"name": "メドレー",                     "sector": "医療DX",       "market": "prime"},
+    "4565": {"name": "ヘリオス",                     "sector": "医療DX",       "market": "growth"},
+    "9229": {"name": "サンウェルズ",                 "sector": "医療DX",       "market": "growth"},
+    "7077": {"name": "ALiNKインターネット",          "sector": "医療DX",       "market": "growth"},
+    # 6095 メドピア / 4489 ペイロール → yfinance取得不可のため除外
+
+    # ── 東証グロース：フィンテック / HR ─────────────────────────
+    "9552": {"name": "M&Aリサーチインスティテュート", "sector": "フィンテック", "market": "growth"},
+    "4483": {"name": "JMDC",                         "sector": "フィンテック", "market": "prime"},
+    "4448": {"name": "チャットワーク",               "sector": "SaaS",         "market": "growth"},
+    "6200": {"name": "インソース",                   "sector": "HR",           "market": "prime"},
+    # 7342 ウェルスナビ / 4485 JTOWER → yfinance取得不可のため除外
+
+    # ── 東証グロース：エネルギーDX / 脱炭素 ─────────────────────
+    "4169": {"name": "ENECHANGE",                    "sector": "エネルギーDX", "market": "growth"},
+    "9223": {"name": "Acroquest Technology",         "sector": "DX",           "market": "growth"},
+
+    # ── 東証グロース：半導体周辺・ハード ─────────────────────────
+    "6254": {"name": "野村マイクロ・サイエンス",     "sector": "半導体",       "market": "prime"},
+    "4369": {"name": "トリケミカル研究所",           "sector": "半導体",       "market": "standard"},
+    "6055": {"name": "ジャパンマテリアル",           "sector": "半導体",       "market": "prime"},
+    "6335": {"name": "東京機械製作所",               "sector": "半導体",       "market": "standard"},
+
+    # ── 米国中小型成長株（現ユニバース未収録） ──────────────────
+    "DUOL": {"name": "Duolingo",                     "sector": "Technology",   "market": "NASDAQ"},
+    "IOT":  {"name": "Samsara",                      "sector": "Technology",   "market": "NYSE"},
+    "TOST": {"name": "Toast",                        "sector": "Technology",   "market": "NYSE"},
+    "HIMS": {"name": "Hims & Hers Health",           "sector": "Healthcare",   "market": "NYSE"},
+    "CELH": {"name": "Celsius Holdings",             "sector": "Consumer",     "market": "NASDAQ"},
+    "SOFI": {"name": "SoFi Technologies",            "sector": "Financials",   "market": "NASDAQ"},
+    "HOOD": {"name": "Robinhood Markets",            "sector": "Financials",   "market": "NASDAQ"},
+    "SMCI": {"name": "Super Micro Computer",         "sector": "Technology",   "market": "NASDAQ"},
+    "MNDY": {"name": "Monday.com",                   "sector": "Technology",   "market": "NASDAQ"},
+    "GTLB": {"name": "GitLab",                       "sector": "Technology",   "market": "NASDAQ"},
+    "BILL": {"name": "Bill.com",                     "sector": "Technology",   "market": "NYSE"},
+    "TTD":  {"name": "The Trade Desk",               "sector": "Technology",   "market": "NASDAQ"},
+    "SE":   {"name": "Sea Limited",                  "sector": "Technology",   "market": "NYSE"},
+    "NU":   {"name": "Nu Holdings",                  "sector": "Financials",   "market": "NYSE"},
+    "APP":  {"name": "AppLovin",                     "sector": "Technology",   "market": "NASDAQ"},
+    "CAVA": {"name": "CAVA Group",                   "sector": "Consumer",     "market": "NYSE"},
+    "AXON": {"name": "Axon Enterprise",              "sector": "Technology",   "market": "NASDAQ"},
+    "PCVX": {"name": "Vaxcyte",                      "sector": "Healthcare",   "market": "NASDAQ"},
+    "RBRK": {"name": "Rubrik",                       "sector": "Technology",   "market": "NYSE"},
+}
+
 # ─── 市場環境把握用指数（推奨対象外・分析用） ────────────────────
 MARKET_INDICES: dict[str, str] = {
     "^VIX":     "CBOE Volatility Index（恐怖指数）",
@@ -359,6 +431,16 @@ def get_japan_symbols() -> list[str]:
 
 def get_us_symbols() -> list[str]:
     return list(US_STOCKS.keys())
+
+def get_tenbagger_symbols() -> list[str]:
+    """テンバガー専用ユニバース（東証グロース小型株 + 米国中小型成長株）"""
+    return list(TENBAGGER_STOCKS.keys())
+
+def get_tenbagger_japan_symbols() -> list[str]:
+    return [k for k, v in TENBAGGER_STOCKS.items() if v.get("market") in ("growth", "standard", "prime") and k.isdigit()]
+
+def get_tenbagger_us_symbols() -> list[str]:
+    return [k for k, v in TENBAGGER_STOCKS.items() if not k.isdigit()]
 
 def get_japan_symbols_by_market(market: str) -> list[str]:
     """prime / standard / growth でフィルタ"""
@@ -383,6 +465,10 @@ def get_symbol_info(symbol: str) -> dict:
         return JAPAN_STOCKS[s]
     if symbol in US_STOCKS:
         return US_STOCKS[symbol]
+    if s in TENBAGGER_STOCKS:
+        return TENBAGGER_STOCKS[s]
+    if symbol in TENBAGGER_STOCKS:
+        return TENBAGGER_STOCKS[symbol]
     return {}
 
 def total_count() -> dict:
