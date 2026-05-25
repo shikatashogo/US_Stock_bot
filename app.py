@@ -237,6 +237,7 @@ with tab1:
                             "銘柄":           f"{r.name}（{r.symbol}）",
                             "シグナル":       r.signal_type,
                             "鮮度":           r.signal_freshness,
+                            "確度":           r.data_confidence,
                             "スコア":         f"{r.total_score}/100",
                             "PEAD":           f"{r.score_pead}/30",
                             "ブレイクアウト": f"{r.score_breakout}/35",
@@ -256,7 +257,7 @@ with tab1:
                     icon   = "🔥" if r.total_score >= 75 else "⚡" if r.total_score >= 60 else "👀"
                     header = (
                         f"{icon} **{rank}位 {r.name}（{r.symbol}）** — "
-                        f"{r.signal_type}  スコア: {r.total_score}/100"
+                        f"{r.signal_type}  スコア: {r.total_score}/100  確度: {r.data_confidence}"
                     )
                     with st.expander(header, expanded=(rank <= 3)):
                         c1, c2 = st.columns(2)
@@ -265,6 +266,7 @@ with tab1:
                             st.markdown("**📈 シグナル詳細**")
                             st.caption(f"シグナル鮮度: {r.signal_freshness}")
                             st.caption(f"決算情報: {r.earnings_info}")
+                            st.caption(f"データ確度: {r.data_confidence}（{r.confidence_detail}）")
                             st.caption(f"決算日出来高: {r.pead_volume_str}")
                             st.divider()
                             st.markdown("**🔍 PEAD条件**")

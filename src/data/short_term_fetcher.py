@@ -189,45 +189,59 @@ class ShortTermFetcher:
             if ed is not None and not ed.empty:
                 today = pd.Timestamp.now(tz="UTC")
 
-                # 過去の決算のみ対象（予想日を除外）
-                past = ed[ed.index <= today]
-                past = past.dropna(subset=["EPS Estimate", "Reported EPS"], how="all")
+                # タイムゾーン正規化（naive index → UTC に統一）
+                if ed.index.tz is None:
+                    ed = ed.copy()
+                    ed.index = ed.index.tz_localize("UTC")
+
+                # 過去の決算のみ（Reported EPS が存在する行）
+                past = ed[ed.index <= today].copy()
+                rep_col = next(
+                    (c for c in past.columns if "reported" in c.lower() or "actual" in c.lower()),
+                    "Reported EPS",
+                )
+                est_col = next(
+                    (c for c in past.columns if "estimate" in c.lower()),
+                    "EPS Estimate",
+                )
+                if rep_col in past.columns:
+                    past = past[past[rep_col].notna()]
 
                 if not past.empty:
-                    latest = past.iloc[0]
+                    latest  = past.iloc[0]
                     earn_ts = latest.name
 
                     last_earnings_date  = str(earn_ts.date())
                     days_since_earnings = (today.date() - earn_ts.date()).days
 
-                    est = latest.get("EPS Estimate")
-                    act = latest.get("Reported EPS")
+                    est = latest.get(est_col) if est_col in past.columns else None
+                    act = latest.get(rep_col) if rep_col in past.columns else None
 
                     if est is not None and act is not None:
                         try:
                             est_f = float(est)
                             act_f = float(act)
-                            if est_f != 0:
+                            if abs(est_f) > 0.0001:  # ゼロ除算防止
                                 eps_beat_pct = (act_f - est_f) / abs(est_f)
                         except (ValueError, TypeError):
                             pass
 
-                    # 決算日の出来高比（60日平均比）
+                    # 決算日の出来高比
                     try:
-                        hist_vol = ticker.history(period="1y")["Volume"].dropna()
-                        avg_vol  = float(hist_vol.iloc[-60:].mean()) if len(hist_vol) >= 10 else None
-                        earn_date = earn_ts.date()
-
-                        # 日付でフィルタ
-                        hist_full = ticker.history(period="1y")
-                        earn_mask = pd.Series(hist_full.index).apply(
-                            lambda x: x.date() == earn_date
-                        ).values
-                        earn_row = hist_full[earn_mask]
-
-                        if not earn_row.empty and avg_vol and avg_vol > 0:
-                            earn_vol = float(earn_row["Volume"].iloc[0])
-                            earnings_day_volume_ratio = earn_vol / avg_vol
+                        if hist is not None and not hist.empty:
+                            earn_date = earn_ts.date()
+                            avg_vol   = float(hist["Volume"].dropna().mean())
+                            # hist のインデックス日付と比較
+                            idx_dates = [
+                                x.date() if hasattr(x, "date") else x
+                                for x in hist.index
+                            ]
+                            earn_mask = [d == earn_date for d in idx_dates]
+                            earn_row  = hist[earn_mask]
+                            if not earn_row.empty and avg_vol > 0:
+                                earnings_day_volume_ratio = (
+                                    float(earn_row["Volume"].iloc[0]) / avg_vol
+                                )
                     except Exception as e:
                         logger.debug(f"[{symbol}] 決算日出来高計算失敗: {e}")
 

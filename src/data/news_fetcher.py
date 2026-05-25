@@ -25,7 +25,7 @@ CACHE_DIR = Path(__file__).resolve().parents[2] / "data" / "recommend_cache"
 CACHE_TTL_HOURS = 12.0
 
 MARKETAUX_BASE_URL = "https://api.marketaux.com/v1/news/all"
-SYMBOLS_PER_REQUEST = 5   # 1リクエストに含める銘柄数（記事の偏りを防ぐ）
+SYMBOLS_PER_REQUEST = 1   # 1銘柄ずつ取得（3記事/reqの制限で複数銘柄だとヒット率が下がる）
 ARTICLES_PER_REQUEST = 3  # 無料プランの上限
 LOOKBACK_DAYS = 7         # 過去何日分のニュースを取得するか
 
@@ -35,7 +35,14 @@ class NewsFetcher:
 
     def __init__(self):
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        # Streamlit Cloud は st.secrets、ローカルは os.getenv / .env の両方に対応
         self.api_key = os.getenv("MARKETAUX_API_KEY", "")
+        if not self.api_key:
+            try:
+                import streamlit as st
+                self.api_key = st.secrets.get("MARKETAUX_API_KEY", "")
+            except Exception:
+                pass
         if not self.api_key:
             logger.warning("MARKETAUX_API_KEY が未設定です。センチメントは中立スコアで代替します。")
 

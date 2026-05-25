@@ -70,6 +70,12 @@ class ShortTermResult:
     breakout_conditions: list = field(default_factory=list)
     momentum_conditions: list = field(default_factory=list)
 
+    # データ確度（取得できたシグナル数に基づく）
+    data_confidence:     str  = "🔴 低"   # "🟢 高" / "🟡 中" / "🔴 低"
+    confidence_detail:   str  = ""        # 例: "3/4シグナル取得済み"
+    signals_available:   int  = 0         # 取得できたシグナル数
+    signals_total:       int  = 4         # シグナル総数
+
     # エントリー目安
     entry_note:    str   = "終値付近でのエントリーが基本"
     stop_loss_pct: float = 0.05   # -5%
@@ -312,16 +318,68 @@ class ShortTermScreener:
         else:
             r.signal_type = "モメンタム候補"
 
-        # シグナル鮮度
+        # シグナル鮮度（決算経過日数）
         days = raw.days_since_earnings
-        if days is not None and days <= 2:
+        if days is None:
+            r.signal_freshness = "❓ 決算日取得失敗"
+        elif days <= 2:
             r.signal_freshness = "⚡ 最高（0〜2日）"
-        elif days is not None and days <= 5:
+        elif days <= 5:
             r.signal_freshness = "🔥 高（3〜5日）"
-        elif days is not None and days <= 10:
+        elif days <= 10:
             r.signal_freshness = "△ 中（6〜10日）"
+        elif days <= 30:
+            r.signal_freshness = f"— {days}日前（PEAD末期）"
         else:
-            r.signal_freshness = "— 低/不明"
+            r.signal_freshness = f"— {days}日前（PEAD圏外）"
+
+        # ── データ確度の計算 ────────────────────────────────────────
+        # 各シグナルのデータ取得状況を評価（4シグナル）
+        avail = 0
+        detail_parts = []
+
+        # ① PEAD: 決算日 + EPS beatの両方が必要
+        if raw.days_since_earnings is not None and raw.eps_beat_pct is not None:
+            avail += 1
+            detail_parts.append("PEAD✅")
+        elif raw.days_since_earnings is not None:
+            avail += 0.5
+            detail_parts.append("PEAD△(EPS不明)")
+        else:
+            detail_parts.append("PEAD❌")
+
+        # ② ブレイクアウト: 52週高値乖離率
+        if raw.pct_from_52w_high is not None:
+            avail += 1
+            detail_parts.append("Breakout✅")
+        else:
+            detail_parts.append("Breakout❌")
+
+        # ③ モメンタム: 5日リターン
+        if raw.return_5d is not None:
+            avail += 1
+            detail_parts.append("Momentum✅")
+        else:
+            detail_parts.append("Momentum❌")
+
+        # ④ センチメント: 中立デフォルト(5pt)より高ければ実データあり
+        if sentiment_score is not None:
+            avail += 1
+            detail_parts.append("Sentiment✅")
+        else:
+            detail_parts.append("Sentiment△(記事なし)")
+
+        r.signals_available = int(avail)
+        r.signals_total     = 4
+        r.confidence_detail = " / ".join(detail_parts)
+
+        ratio = avail / 4.0
+        if ratio >= 0.75:
+            r.data_confidence = "🟢 高"
+        elif ratio >= 0.5:
+            r.data_confidence = "🟡 中"
+        else:
+            r.data_confidence = "🔴 低（参考値）"
 
         # 表示文字列
         if raw.eps_beat_pct is not None and raw.last_earnings_date:
