@@ -246,7 +246,33 @@ class ShortTermFetcher:
                         logger.debug(f"[{symbol}] 決算日出来高計算失敗: {e}")
 
         except Exception as e:
-            logger.debug(f"[{symbol}] 決算データ取得失敗: {e}")
+            logger.debug(f"[{symbol}] earnings_dates 取得失敗（lxml未インストール等）: {e}")
+
+        # ── earnings_dates が取れなかった場合: info の earningsTimestamp で補完 ──
+        if last_earnings_date is None:
+            try:
+                from datetime import date as date_cls
+                et = info.get("earningsTimestamp")
+                if et is not None:
+                    earn_date_ts = date_cls.fromtimestamp(et)
+                    days_ts = (date_cls.today() - earn_date_ts).days
+                    # 過去の決算（0日以上前）のみ採用
+                    if days_ts >= 0:
+                        last_earnings_date  = str(earn_date_ts)
+                        days_since_earnings = days_ts
+                        # EPS beat の代替: earningsQuarterlyGrowth（YoY成長率）
+                        # 実際のアナリスト予想 vs 実績ではないが、方向性の代理指標として使用
+                        if eps_beat_pct is None:
+                            egr = info.get("earningsQuarterlyGrowth")
+                            if egr is not None:
+                                # 正の成長率を beat として扱う（0.1 = 10%成長 → 緩い近似）
+                                eps_beat_pct = float(egr) * 0.5   # 保守的に半分で近似
+                        logger.debug(
+                            f"[{symbol}] earningsTimestamp フォールバック使用: "
+                            f"{earn_date_ts} ({days_ts}日前)"
+                        )
+            except Exception as e:
+                logger.debug(f"[{symbol}] earningsTimestamp フォールバック失敗: {e}")
 
         # ── 空売り残高 ────────────────────────────────────────────────
         short_percent_of_float = None

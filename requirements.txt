@@ -31,5 +31,8 @@ streamlit>=1.35.0
 xlrd>=2.0.1
 openpyxl>=3.1.0
 
+# yfinance earnings_dates の HTML パース（短期スクリーナーの決算日取得に必要）
+lxml>=4.9.0
+
 # テスト
 pytest>=8.0.0
