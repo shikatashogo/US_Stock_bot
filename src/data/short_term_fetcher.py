@@ -51,6 +51,10 @@ class ShortTermRawData:
     pct_from_52w_high: Optional[float] = None       # (現在値 - 52週高値) / 52週高値（負値）
     volume_ratio_10d: Optional[float] = None        # 直近出来高 / 10日平均出来高
 
+    # ── 短期モメンタム（常時機能・決算タイミング非依存）
+    return_5d: Optional[float] = None               # 5日リターン（小数）
+    return_20d: Optional[float] = None              # 20日リターン（小数）
+
     # ── 需給
     short_percent_of_float: Optional[float] = None  # 小数（0.15 = 15%）
 
@@ -162,6 +166,18 @@ class ShortTermFetcher:
         except Exception as e:
             logger.debug(f"[{symbol}] 価格履歴取得失敗: {e}")
 
+        # ── 短期モメンタム（5日・20日リターン） ────────────────────────
+        return_5d = return_20d = None
+        try:
+            if hist is not None and not hist.empty:
+                close_s = hist["Close"].dropna()
+                if len(close_s) >= 6:
+                    return_5d  = float(close_s.iloc[-1] / close_s.iloc[-6]  - 1)
+                if len(close_s) >= 21:
+                    return_20d = float(close_s.iloc[-1] / close_s.iloc[-21] - 1)
+        except Exception as e:
+            logger.debug(f"[{symbol}] 短期リターン計算失敗: {e}")
+
         # ── PEAD: 決算日・EPS beat・決算日出来高 ──────────────────────
         last_earnings_date = None
         days_since_earnings = None
@@ -239,6 +255,8 @@ class ShortTermFetcher:
             above_ma200=above_ma200,
             pct_from_52w_high=pct_from_52w_high,
             volume_ratio_10d=volume_ratio_10d,
+            return_5d=return_5d,
+            return_20d=return_20d,
             short_percent_of_float=short_percent_of_float,
             week52_high=week52_high,
             week52_low=week52_low,

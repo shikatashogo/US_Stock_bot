@@ -87,7 +87,7 @@ with st.sidebar:
     else:
         scan_mode = "🔬 フルスキャン（全銘柄）"
 
-    top_n = st.slider("推奨銘柄の表示上限", min_value=3, max_value=20, value=8)
+    top_n = st.slider("推奨銘柄の表示上限", min_value=3, max_value=20, value=10)
 
     use_cache = st.checkbox(
         "前回の分析結果を再利用（高速）", value=False,
@@ -233,18 +233,19 @@ with tab1:
                         icon = "🔥" if r.total_score >= 75 else "⚡" if r.total_score >= 60 else "👀"
                         price_str = f"${r.current_price:,.2f}" if r.current_price else "N/A"
                         st_rows.append({
-                            "順位":         f"{icon} {rank}",
-                            "銘柄":         f"{r.name}（{r.symbol}）",
-                            "シグナル":     r.signal_type,
-                            "鮮度":         r.signal_freshness,
-                            "スコア":       f"{r.total_score}/100",
-                            "PEAD":         f"{r.score_pead}/40",
+                            "順位":           f"{icon} {rank}",
+                            "銘柄":           f"{r.name}（{r.symbol}）",
+                            "シグナル":       r.signal_type,
+                            "鮮度":           r.signal_freshness,
+                            "スコア":         f"{r.total_score}/100",
+                            "PEAD":           f"{r.score_pead}/30",
                             "ブレイクアウト": f"{r.score_breakout}/35",
-                            "センチメント": f"{r.score_sentiment}/20",
-                            "現在株価":     price_str,
-                            "損切目安":     f"-{r.stop_loss_pct*100:.0f}%",
-                            "目標":         f"+{r.target_pct*100:.0f}%",
-                            "保有期間":     r.hold_days,
+                            "モメンタム":     f"{r.score_momentum}/15",
+                            "センチメント":   f"{r.score_sentiment}/15",
+                            "現在株価":       price_str,
+                            "損切目安":       f"-{r.stop_loss_pct*100:.0f}%",
+                            "目標":           f"+{r.target_pct*100:.0f}%",
+                            "保有期間":       r.hold_days,
                         })
                     st.dataframe(st_rows, use_container_width=True, hide_index=True)
 
@@ -273,12 +274,18 @@ with tab1:
                             st.markdown("**📐 ブレイクアウト条件**")
                             for cond in r.breakout_conditions:
                                 st.caption(cond)
+                            st.divider()
+                            st.markdown("**📈 短期モメンタム**")
+                            for cond in r.momentum_conditions:
+                                st.caption(cond)
 
                         with c2:
                             st.markdown("**📊 スコア内訳**")
-                            st.metric("PEAD（決算後モメンタム）", f"{r.score_pead} / 40点")
+                            st.metric("PEAD（決算後モメンタム）", f"{r.score_pead} / 30点")
                             st.metric("ブレイクアウト",          f"{r.score_breakout} / 35点")
-                            st.metric("ニュースセンチメント",    f"{r.score_sentiment} / 20点",
+                            st.metric("短期モメンタム",          f"{r.score_momentum} / 15点",
+                                      help=r.momentum_str)
+                            st.metric("ニュースセンチメント",    f"{r.score_sentiment} / 15点",
                                       help=r.sentiment_str)
                             st.metric("需給（ショート残）",      f"{r.score_short_squeeze} / 5点",
                                       help=r.short_str)

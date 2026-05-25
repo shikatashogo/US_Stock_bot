@@ -1,19 +1,21 @@
 """
 短期モメンタムスクリーナー（1〜2週間目線）
 ==========================================
-3種のシグナルを100点満点で採点し、50点以上を候補として返す。
+4種のシグナルを100点満点で採点し、35点以上を候補として返す。
 
 スコア構成:
-  A. PEAD（決算後モメンタム）    : 0〜40点
-  B. 52週高値ブレイクアウト      : 0〜35点
-  C. ニュースセンチメント（MarketAux）: 0〜20点
-  D. ショートスクイーズ候補      : 0〜 5点
-  合計: 100点満点、閾値: 50点
+  A. PEAD（決算後モメンタム）      : 0〜30点  ※有効期間を30日に延長
+  B. 52週高値ブレイクアウト        : 0〜35点
+  C. 短期モメンタム（5日・20日）   : 0〜15点  ※常時機能・決算タイミング非依存
+  D. ニュースセンチメント（MarketAux）: 0〜15点
+  E. ショートスクイーズ候補        : 0〜 5点
+  合計: 100点満点、閾値: 35点
 
-精度の考え方:
-  PEAD は学術研究で再現性が最も高い短期シグナル（期待勝率 ~60-65%）。
-  センチメントを重ねることで精度を ~68-70% に引き上げる狙い。
-  短期トレードの性質上「必ず当たる」シグナルは存在しない点に留意。
+設計思想:
+  - PEAD は最も精度が高いが決算シーズン外はスコア0になる（エピソード的）
+  - ブレイクアウト＋短期モメンタムは常時機能する連続的指標
+  - 閾値35点 = 「ブレイクアウト良好（20pt）＋上昇中（10pt）＋センチメント中立（5pt）」で到達
+  - 短期トレードの性質上「必ず当たる」シグナルは存在しない点に留意
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from loguru import logger
 
 from src.data.short_term_fetcher import ShortTermRawData
 
-PASS_THRESHOLD = 50  # 合計スコアの最低ライン
+PASS_THRESHOLD = 35  # 合計スコアの最低ライン
 
 
 # ─── 結果データクラス ─────────────────────────────────────────────
@@ -38,9 +40,10 @@ class ShortTermResult:
     current_price: Optional[float] = None
 
     # スコア内訳
-    score_pead:          int = 0   # 0〜40
+    score_pead:          int = 0   # 0〜30
     score_breakout:      int = 0   # 0〜35
-    score_sentiment:     int = 0   # 0〜20
+    score_momentum:      int = 0   # 0〜15（5日・20日リターン）
+    score_sentiment:     int = 0   # 0〜15
     score_short_squeeze: int = 0   # 0〜 5
     total_score:         int = 0   # 0〜100
 
@@ -58,12 +61,14 @@ class ShortTermResult:
     ma200_str:              str = "不明"
     high52w_str:            str = "不明"
     volume_str:             str = "不明"
+    momentum_str:           str = "不明"
     sentiment_str:          str = "不明"
     short_str:              str = "—"
 
-    # PEAD詳細条件リスト（UIに箇条書き表示）
+    # 各シグナルの詳細条件リスト（UIに箇条書き表示）
     pead_conditions:     list = field(default_factory=list)
     breakout_conditions: list = field(default_factory=list)
+    momentum_conditions: list = field(default_factory=list)
 
     # エントリー目安
     entry_note:    str   = "終値付近でのエントリーが基本"
@@ -77,62 +82,109 @@ class ShortTermResult:
 class ShortTermScreener:
     """短期モメンタムスコアリングクラス"""
 
-    # ── A. PEAD スコア（0〜40点） ───────────────────────────────────
+    # ── A. PEAD スコア（0〜30点・有効期間30日） ─────────────────────
 
     def _score_pead(self, raw: ShortTermRawData) -> tuple[int, list[str]]:
         score = 0
         conds: list[str] = []
 
-        # ① 経過日数（シグナルの鮮度）
+        # ① 経過日数（30日まで有効・鮮度で重み付け）
         days = raw.days_since_earnings
         if days is None:
             conds.append("❓ 決算日不明")
-        elif days <= 2:
-            score += 15
-            conds.append(f"✅ 決算{days}日後（最鮮度）")
-        elif days <= 5:
-            score += 10
-            conds.append(f"✅ 決算{days}日後")
+        elif days <= 3:
+            score += 12
+            conds.append(f"✅ 決算{days}日後（最鮮度・ドリフト初期）")
         elif days <= 10:
-            score += 5
-            conds.append(f"△ 決算{days}日後（やや鮮度低下）")
+            score += 8
+            conds.append(f"✅ 決算{days}日後（鮮度高）")
+        elif days <= 20:
+            score += 4
+            conds.append(f"△ 決算{days}日後（ドリフト中盤）")
+        elif days <= 30:
+            score += 2
+            conds.append(f"△ 決算{days}日後（ドリフト末期）")
         else:
-            conds.append(f"❌ 決算{days}日後（シグナル期限切れ）")
+            conds.append(f"— 決算{days}日後（PEADウィンドウ外）")
 
         # ② EPS beat幅
         beat = raw.eps_beat_pct
         if beat is None:
             conds.append("❓ EPS beat 不明")
         elif beat >= 0.20:
-            score += 15
+            score += 12
             conds.append(f"✅ EPS beat +{beat*100:.0f}%（大幅超過）")
         elif beat >= 0.10:
-            score += 10
+            score += 8
             conds.append(f"✅ EPS beat +{beat*100:.0f}%")
-        elif beat >= 0.05:
-            score += 5
+        elif beat >= 0.03:
+            score += 4
             conds.append(f"△ EPS beat +{beat*100:.0f}%（小幅超過）")
         elif beat >= 0:
-            score += 2
+            score += 1
             conds.append(f"△ EPS beat +{beat*100:.0f}%（ほぼ予想通り）")
         else:
-            score -= 5
+            score -= 4
             conds.append(f"❌ EPS miss {beat*100:.0f}%（予想下回り）")
 
-        # ③ 決算日出来高（機関投資家の動き確認）
+        # ③ 決算日出来高
         vol_r = raw.earnings_day_volume_ratio
         if vol_r is None:
             conds.append("❓ 決算日出来高 不明")
         elif vol_r >= 2.0:
-            score += 10
+            score += 6
             conds.append(f"✅ 決算日出来高 平均比 {vol_r:.1f}倍（機関買い示唆）")
         elif vol_r >= 1.5:
-            score += 5
+            score += 3
             conds.append(f"△ 決算日出来高 平均比 {vol_r:.1f}倍")
         else:
-            conds.append(f"❌ 決算日出来高 平均比 {vol_r:.1f}倍（低調）")
+            conds.append(f"— 決算日出来高 平均比 {vol_r:.1f}倍")
 
-        return max(0, min(40, score)), conds
+        return max(0, min(30, score)), conds
+
+    # ── C. 短期モメンタムスコア（0〜15点・常時機能） ────────────────
+
+    def _score_momentum(self, raw: ShortTermRawData) -> tuple[int, list[str]]:
+        """5日・20日リターンで短期上昇トレンドを測定する。決算タイミング非依存。"""
+        score = 0
+        conds: list[str] = []
+
+        # 5日リターン（直近の勢い）
+        r5 = raw.return_5d
+        if r5 is None:
+            conds.append("❓ 5日リターン 不明")
+        elif r5 >= 0.07:
+            score += 10
+            conds.append(f"✅ 5日リターン +{r5*100:.1f}%（強いモメンタム）")
+        elif r5 >= 0.03:
+            score += 7
+            conds.append(f"✅ 5日リターン +{r5*100:.1f}%")
+        elif r5 >= 0.01:
+            score += 4
+            conds.append(f"△ 5日リターン +{r5*100:.1f}%（上昇中）")
+        elif r5 >= -0.02:
+            score += 1
+            conds.append(f"△ 5日リターン {r5*100:.1f}%（横ばい）")
+        else:
+            conds.append(f"❌ 5日リターン {r5*100:.1f}%（下落中）")
+
+        # 20日リターン（中期トレンド確認）
+        r20 = raw.return_20d
+        if r20 is None:
+            conds.append("❓ 20日リターン 不明")
+        elif r20 >= 0.10:
+            score += 5
+            conds.append(f"✅ 20日リターン +{r20*100:.1f}%（中期上昇トレンド）")
+        elif r20 >= 0.04:
+            score += 3
+            conds.append(f"△ 20日リターン +{r20*100:.1f}%")
+        elif r20 < -0.05:
+            score -= 3
+            conds.append(f"❌ 20日リターン {r20*100:.1f}%（中期下落）")
+        else:
+            conds.append(f"— 20日リターン {r20*100:.1f}%")
+
+        return max(0, min(15, score)), conds
 
     # ── B. ブレイクアウトスコア（0〜35点） ─────────────────────────
 
@@ -196,15 +248,15 @@ class ShortTermScreener:
 
         return max(0, min(35, score)), conds
 
-    # ── C. センチメントスコア（0〜20点） ───────────────────────────
+    # ── D. センチメントスコア（0〜15点） ───────────────────────────
 
     def _score_sentiment(self, score: Optional[float]) -> tuple[int, str]:
         if score is None:
             return 5, "不明（記事なし・中立扱い）"
         if score >= 0.5:
-            return 20, f"強気 ({score:+.2f})"
+            return 15, f"強気 ({score:+.2f})"
         if score >= 0.2:
-            return 12, f"やや強気 ({score:+.2f})"
+            return 10, f"やや強気 ({score:+.2f})"
         if score >= -0.2:
             return 5, f"中立 ({score:+.2f})"
         if score >= -0.5:
@@ -238,13 +290,14 @@ class ShortTermScreener:
         # スコア計算
         r.score_pead,          r.pead_conditions     = self._score_pead(raw)
         r.score_breakout,      r.breakout_conditions = self._score_breakout(raw)
+        r.score_momentum,      r.momentum_conditions = self._score_momentum(raw)
         r.score_sentiment,     r.sentiment_str       = self._score_sentiment(sentiment_score)
         r.score_short_squeeze, r.short_str           = self._score_short_squeeze(
             raw.short_percent_of_float
         )
 
         r.total_score = max(0, min(100,
-            r.score_pead + r.score_breakout +
+            r.score_pead + r.score_breakout + r.score_momentum +
             r.score_sentiment + r.score_short_squeeze
         ))
         r.qualified = r.total_score >= PASS_THRESHOLD
@@ -296,6 +349,13 @@ class ShortTermScreener:
             f"{raw.volume_ratio_10d:.1f}倍"
             if raw.volume_ratio_10d is not None else "不明"
         )
+
+        parts = []
+        if raw.return_5d is not None:
+            parts.append(f"5日: {raw.return_5d*100:+.1f}%")
+        if raw.return_20d is not None:
+            parts.append(f"20日: {raw.return_20d*100:+.1f}%")
+        r.momentum_str = " / ".join(parts) if parts else "不明"
 
         # エントリー目安
         if r.score_pead >= 25 and r.score_breakout >= 15:
